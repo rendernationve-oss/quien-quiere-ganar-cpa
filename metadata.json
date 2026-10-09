@@ -1,0 +1,8 @@
+{
+  "name": "Remix Quién Quiere Ganar en Puerto Azul",
+  "description": "Juego interactivo de televisión en vivo basado en ¿Quién quiere ser millonario?, adaptado para proyector y tablets con panel de administración para Club Puerto Azul.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

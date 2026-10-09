@@ -1,0 +1,201 @@
+@import "tailwindcss";
+
+@layer utilities {
+  /* Precision TV Lozenge Shapes */
+  .lozenge-outer {
+    clip-path: polygon(
+      28px 0%,
+      calc(100% - 28px) 0%,
+      100% 50%,
+      calc(100% - 28px) 100%,
+      28px 100%,
+      0% 50%
+    );
+  }
+
+  .lozenge-inner {
+    clip-path: polygon(
+      26px 0%,
+      calc(100% - 26px) 0%,
+      100% 50%,
+      calc(100% - 26px) 100%,
+      26px 100%,
+      0% 50%
+    );
+  }
+}
+
+@media (max-width: 640px) {
+  .lozenge-outer {
+    clip-path: polygon(
+      18px 0%,
+      calc(100% - 18px) 0%,
+      100% 50%,
+      calc(100% - 18px) 100%,
+      18px 100%,
+      0% 50%
+    ) !important;
+  }
+
+  .lozenge-inner {
+    clip-path: polygon(
+      16px 0%,
+      calc(100% - 16px) 0%,
+      100% 50%,
+      calc(100% - 16px) 100%,
+      16px 100%,
+      0% 50%
+    ) !important;
+  }
+}
+
+/* Metallic Chrome Border Gradient */
+.border-chrome-silver {
+  background: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    #e2e8f0 18%,
+    #94a3b8 42%,
+    #475569 58%,
+    #cbd5e1 82%,
+    #ffffff 100%
+  );
+  filter: drop-shadow(0 0 7px rgba(226, 232, 240, 0.5));
+}
+
+/* Horizontal Connector Beams */
+.connector-beam {
+  height: 2.5px;
+  background: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    #cbd5e1 35%,
+    #64748b 65%,
+    #ffffff 100%
+  );
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7), 0 0 12px rgba(148, 163, 184, 0.4);
+}
+
+/* Neutral Deep Midnight / Indigo Fill (matching reference image) */
+.bg-tv-deep-indigo {
+  background: radial-gradient(
+    ellipse at center,
+    #150e42 0%,
+    #0c082b 60%,
+    #05041a 100%
+  );
+}
+
+/* Interactive States: Orange on Select, Green on Correct, Red on Wrong */
+
+/* 1. Selected (Naranja al seleccionar) */
+.glow-selected-orange {
+  background: linear-gradient(180deg, #ff9800 0%, #ea580c 45%, #c2410c 100%) !important;
+  box-shadow: 0 0 25px rgba(249, 115, 22, 0.95), inset 0 0 15px rgba(255, 255, 255, 0.5);
+  filter: drop-shadow(0 0 16px rgba(249, 115, 22, 0.9)) !important;
+  color: #ffffff !important;
+}
+
+/* 2. Correct (Verde al acertar) */
+.glow-correct-green {
+  background: linear-gradient(180deg, #10b981 0%, #059669 45%, #047857 100%) !important;
+  box-shadow: 0 0 35px rgba(16, 185, 129, 0.95), inset 0 0 18px rgba(255, 255, 255, 0.6);
+  filter: drop-shadow(0 0 20px rgba(16, 185, 129, 0.95)) !important;
+  color: #ffffff !important;
+  animation: pulse-green 1.2s infinite alternate ease-in-out;
+}
+
+/* 3. Incorrect (Rojo al fallar) */
+.glow-wrong-red {
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 45%, #991b1b 100%) !important;
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.95), inset 0 0 15px rgba(255, 255, 255, 0.5);
+  filter: drop-shadow(0 0 18px rgba(239, 68, 68, 0.9)) !important;
+  color: #ffffff !important;
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes pulse-green {
+  0% {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.7), inset 0 0 10px rgba(255, 255, 255, 0.4);
+    transform: scale(1);
+  }
+  100% {
+    box-shadow: 0 0 45px rgba(16, 185, 129, 1), inset 0 0 22px rgba(255, 255, 255, 0.7);
+    transform: scale(1.012);
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+/* User's specified card style */
+.casilla-pregunta-respuesta {
+  border-radius: 12px; /* 0.75rem */
+  border: 1px solid #E5E7EB;
+  background-color: #FFFFFF;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+/* User's exact interactive color rules for answers */
+/* 1. Selección inicial: Relleno de color amarillo */
+.answer-selected-yellow {
+  background: linear-gradient(180deg, #fef08a 0%, #eab308 50%, #ca8a04 100%) !important;
+  border-color: #a16207 !important;
+  color: #0f172a !important;
+  box-shadow: 0 0 20px rgba(234, 179, 8, 0.85), 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 2. Respuesta correcta: Verde */
+.answer-correct-green {
+  background: linear-gradient(180deg, #34d399 0%, #10b981 50%, #059669 100%) !important;
+  border-color: #047857 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.9), 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+  animation: pulse-green 1.2s infinite alternate ease-in-out;
+}
+
+/* 3. Respuesta incorrecta: Rojo */
+.answer-wrong-red {
+  background: linear-gradient(180deg, #f87171 0%, #ef4444 50%, #dc2626 100%) !important;
+  border-color: #b91c1c !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.9), 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+  animation: shake 0.4s ease-in-out;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(3, 7, 18, 0.6);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(226, 232, 240, 0.8);
+}
+
+/* Refined elegant SVG metallic frame strokes (1.5px Non-Scaling Stroke) */
+svg path[class*="cls-"] {
+  stroke-width: 1.5px !important;
+  vector-effect: non-scaling-stroke !important;
+}
+
+@keyframes splashBreathe {
+  0% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 25px rgba(0, 212, 255, 0.45));
+  }
+  100% {
+    transform: scale(1.03);
+    filter: drop-shadow(0 0 45px rgba(0, 212, 255, 0.75));
+  }
+}

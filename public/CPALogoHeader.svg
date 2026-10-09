@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 240" width="1600" height="240">
+  <defs>
+    <style>
+      @font-face {
+        font-family: 'URWGothic';
+        src: url('/usr/share/fonts/opentype/urw-base35/URWGothic-Book.otf');
+      }
+      .brand-title {
+        font-family: 'URW Gothic', 'URWGothic-Book', sans-serif;
+        font-weight: normal;
+        fill: #ffffff;
+        font-size: 148px;
+        letter-spacing: -2px;
+      }
+      .bullet {
+        font-size: 110px;
+        fill: #ffffff;
+      }
+    </style>
+  </defs>
+
+  <!-- Farito Circle Emblem -->
+  <g id="farito-symbol" transform="translate(20, 10)">
+    <!-- Outer Ring -->
+    <circle cx="110" cy="110" r="102" fill="none" stroke="#ffffff" stroke-width="12" />
+
+    <!-- Lighthouse (El Farito) -->
+    <!-- Dome Roof -->
+    <path d="M 88,52 C 88,34 132,34 132,52 Z" fill="#ffffff" />
+    <circle cx="110" cy="30" r="3.5" fill="#ffffff" />
+
+    <!-- Lantern Room / Gallery -->
+    <rect x="80" y="52" width="60" height="5" fill="#ffffff" rx="2" />
+    <rect x="78" y="69" width="64" height="7" fill="#ffffff" rx="2" />
+    <!-- Glass Mullions -->
+    <rect x="87" y="57" width="6" height="12" fill="#ffffff" />
+    <rect x="101" y="57" width="6" height="12" fill="#ffffff" />
+    <rect x="113" y="57" width="6" height="12" fill="#ffffff" />
+    <rect x="127" y="57" width="6" height="12" fill="#ffffff" />
+
+    <!-- Upper Body Block -->
+    <rect x="89" y="82" width="42" height="22" fill="#ffffff" />
+
+    <!-- Middle Separator & Body Block -->
+    <rect x="104" y="108" width="12" height="8" fill="#ffffff" />
+    <rect x="85" y="120" width="50" height="24" fill="#ffffff" />
+
+    <!-- Lower Separator & Base -->
+    <rect x="104" y="148" width="12" height="8" fill="#ffffff" />
+    <rect x="83" y="160" width="54" height="14" fill="#ffffff" />
+
+    <!-- Ocean Wave Bands at Base -->
+    <path d="M 14,156 C 45,148 78,162 110,172 C 142,182 175,164 206,156 C 180,172 142,190 110,181 C 78,172 45,159 14,156 Z" fill="#ffffff" />
+    <path d="M 26,178 C 55,171 88,183 115,191 C 142,199 170,186 194,178 C 168,194 137,208 111,200 C 85,192 55,180 26,178 Z" fill="#ffffff" />
+    <path d="M 48,198 C 70,193 96,203 117,209 C 138,215 158,208 172,201 C 150,213 130,221 112,217 C 94,213 70,204 48,198 Z" fill="#ffffff" />
+  </g>
+
+  <!-- Typography: Club • Puerto Azul -->
+  <text x="280" y="162" class="brand-title">
+    Club <tspan class="bullet" dy="-10">•</tspan><tspan dy="10"> Puerto Azul</tspan>
+  </text>
+</svg>
