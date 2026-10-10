@@ -46,7 +46,7 @@ import {
   LEGACY_STORAGE_KEY,
   GAME_SYNC_CHANNEL_KEY,
 } from './utils/broadcastSync';
-import { subscribeToGameState, pushGameState } from './utils/firebase';
+import { subscribeToGameState, pushGameState } from './utils/supabase';
 import { SplashScreen } from './components/SplashScreen';
 import { ClubLogo } from './components/ClubLogo';
 import { ShowLogo } from './components/ShowLogo';
