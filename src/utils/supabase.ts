@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, RealtimeChannel } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://ncywejhaprkriumfzfyt.supabase.co';
 const SUPABASE_ANON_KEY =
@@ -6,59 +6,61 @@ const SUPABASE_ANON_KEY =
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const GAME_CHANNEL_NAME = 'room_puerto_azul_live';
+const GAME_CHANNEL_NAME = 'cpa_live_game_room';
 
-let channelStatus = 'CONNECTING';
-let lastOutgoingState: any = null;
-const listeners: Array<(state: any) => void> = [];
+let gameChannel: RealtimeChannel | null = null;
 
-export const gameChannel = supabase.channel(GAME_CHANNEL_NAME, {
-  config: {
-    broadcast: { ack: true, self: true },
-  },
-});
+export const initGameChannel = () => {
+  if (!gameChannel) {
+    gameChannel = supabase.channel(GAME_CHANNEL_NAME, {
+      config: {
+        broadcast: { ack: true, self: false },
+      },
+    });
 
-gameChannel
-  .on('broadcast', { event: 'GAME_SYNC' }, (payload: any) => {
-    console.log('[Supabase Realtime] Mensaje recibido:', payload);
-    if (payload && payload.payload) {
-      listeners.forEach((fn) => fn(payload.payload));
-    }
-  })
-  .subscribe((status) => {
-    channelStatus = status;
-    console.log('[Supabase Realtime Estado]:', status);
-    if (status === 'SUBSCRIBED' && lastOutgoingState) {
-      pushGameState(lastOutgoingState);
-    }
-  });
+    gameChannel.subscribe((status) => {
+      console.log('[Supabase Realtime Status]:', status);
+    });
+  }
+  return gameChannel;
+};
 
+// Inicializamos el canal de inmediato
+initGameChannel();
+
+/**
+ * Emite el estado desde la PC Máster
+ */
 export const pushGameState = async (state: any) => {
   if (!state) return;
-  lastOutgoingState = state;
-
-  if (channelStatus !== 'SUBSCRIBED') {
-    console.warn('[Supabase Realtime] Esperando conexión para enviar...');
-    return;
-  }
+  const channel = initGameChannel();
 
   try {
-    const res = await gameChannel.send({
+    await channel.send({
       type: 'broadcast',
       event: 'GAME_SYNC',
       payload: state,
     });
-    console.log('[Supabase Realtime] Enviado exitosamente:', res);
   } catch (err) {
-    console.error('[Supabase Realtime Error al enviar]:', err);
+    console.warn('[Supabase Broadcast Error]:', err);
   }
 };
 
+/**
+ * Escucha los cambios en tiempo real en la Pantalla Pública
+ */
 export const subscribeToGameState = (onStateChange: (state: any) => void) => {
-  listeners.push(onStateChange);
+  const channel = initGameChannel();
+
+  channel.on('broadcast', { event: 'GAME_SYNC' }, (payload: any) => {
+    if (payload && payload.payload) {
+      onStateChange(payload.payload);
+    } else if (payload) {
+      onStateChange(payload);
+    }
+  });
 
   return () => {
-    const idx = listeners.indexOf(onStateChange);
-    if (idx > -1) listeners.splice(idx, 1);
+    // Mantener canal activo durante toda la sesión
   };
 };
