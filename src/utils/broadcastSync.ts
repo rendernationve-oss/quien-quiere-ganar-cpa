@@ -1,40 +1,38 @@
 /**
  * BroadcastChannel & LocalStorage Unified State Sync for "¿Quién Quiere Ganar en Puerto Azul?"
- * Provides zero-latency real-time synchronization between Operator (Moderator) and Public Display (Clean Feed)
- * across windows, tabs, and multimonitor setups.
+ * Zero-latency real-time synchronization between Operator (Moderator) and Public Display
  */
 
 import { ParticipantSession } from '../types/game';
 import { LogoConfig } from './logoStorage';
-import { pushGameState } from './firebase';
+import { pushGameState } from './supabase';
 
 export const CHANNEL_NAME = 'puerto_azul_game_channel';
 export const GAME_SYNC_CHANNEL_KEY = 'game_sync_channel';
 export const LIVE_STORAGE_KEY = 'puerto_azul_live_state';
-// Backward compatibility key
 export const LEGACY_STORAGE_KEY = 'puerto_azul_sync_state';
 
 export type GameStage = 'SPLASH' | 'PLAYING' | 'GAME_OVER';
 export type AnswerStatus = 'idle' | 'selected' | 'correct' | 'wrong';
 
 export interface UnifiedGameState {
-  logoHeaderData: string; // URL or base64 of the header logo
-  clubLocation: string; // e.g. "NAIGUATÁ, VARGAS"
-  clubName: string; // e.g. "CLUB PUERTO AZUL"
+  logoHeaderData: string;
+  clubLocation: string;
+  clubName: string;
   gameStage: GameStage;
   currentParticipant: ParticipantSession | null;
   currentParticipantIndex: number;
-  currentQuestionIndex: number; // 0-based question index (0 to 14)
-  currentLevel: number; // 1-based question level (1 to 15)
-  selectedAnswer: string | null; // e.g. 'A', 'B', 'C', 'D' or null
+  currentQuestionIndex: number;
+  currentLevel: number;
+  selectedAnswer: string | null;
   answerStatus: AnswerStatus;
   revealedLifelines: {
     fiftyFifty: boolean;
     audience: boolean;
     phone: boolean;
   };
-  hiddenOptions: string[]; // e.g. ['A', 'C'] for 50:50
-  activeTimer: number | null; // active timer in seconds if any (e.g. 30s phone)
+  hiddenOptions: string[];
+  activeTimer: number | null;
   activeModal: string | null;
   projectorMode: boolean;
   logoConfig?: LogoConfig;
@@ -42,7 +40,6 @@ export interface UnifiedGameState {
   soundMuted?: boolean;
   lastUpdated: number;
   senderId?: string;
-  // Backward compatibility convenience fields
   selectedOption?: string | null;
   revealedState?: any;
   lifelines?: any;
@@ -52,7 +49,6 @@ export interface UnifiedGameState {
   payload?: any;
 }
 
-// Unique instance ID for the current window/tab
 export const INSTANCE_ID = `win_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
 
 class GameBroadcastChannel {
@@ -66,10 +62,8 @@ class GameBroadcastChannel {
         this.channel.onmessage = (event: MessageEvent<UnifiedGameState | any>) => {
           const data = event.data;
           if (!data) return;
-          // Ignore messages sent by self
           if (data.senderId && data.senderId === INSTANCE_ID) return;
 
-          // Normalize if payload came in wrapper format
           const state: UnifiedGameState = data.state || data;
           if (state && (typeof state.lastUpdated === 'number' || (state as any).actionType)) {
             this.listeners.forEach((listener) => {
@@ -106,9 +100,6 @@ class GameBroadcastChannel {
     }
   }
 
-  /**
-   * Backward compatibility send method
-   */
   public send(actionType: string, payload?: any) {
     if (!this.channel) return;
     try {
@@ -134,12 +125,6 @@ class GameBroadcastChannel {
 
 export const gameBroadcast = new GameBroadcastChannel();
 
-/**
- * Emisor (Ventana Moderador):
- * Cada vez que cambie CUALQUIER propiedad:
- * 1. Guarda en localStorage.setItem('puerto_azul_live_state', JSON.stringify(fullState));
- * 2. Emite vía broadcastChannel.postMessage(fullState);
- */
 export function broadcastGameState(
   fullState: Partial<UnifiedGameState> | any,
   actionType?: string,
@@ -155,7 +140,6 @@ export function broadcastGameState(
     senderId: INSTANCE_ID,
   };
 
-  // Structured direct payload for game_sync_channel
   const directPayload = {
     stage: isStarted ? 'GAME' : 'SPLASH',
     questionIndex: fullState.currentQuestionIndex ?? (fullState.currentLevel ? fullState.currentLevel - 1 : 0),
@@ -170,7 +154,7 @@ export function broadcastGameState(
     fullState: payload,
   };
 
-  // 1. LocalStorage (Cross-tab, cross-window & initial sync on boot)
+  // 1. LocalStorage
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       const serialized = JSON.stringify(payload);
@@ -182,7 +166,7 @@ export function broadcastGameState(
     }
   }
 
-  // 2. BroadcastChannel (0ms memory transport)
+  // 2. BroadcastChannel
   gameBroadcast.postMessage(payload);
   if (typeof window !== 'undefined' && (window as any).broadcastChannel) {
     try {
@@ -190,18 +174,13 @@ export function broadcastGameState(
     } catch {}
   }
 
-  // 3. Primary Network Sync via Firebase Realtime Database
+  // 3. Cloud Sync via Supabase
   pushGameState(payload);
 }
 
-/**
- * Receptor (Ventana ?view=display):
- * Lee de inmediato 'puerto_azul_live_state' o 'game_sync_channel' desde localStorage al iniciar
- */
 export function getStoredGameState(): UnifiedGameState | null {
   if (typeof window === 'undefined' || !window.localStorage) return null;
   try {
-    // 1. Direct game_sync_channel check
     const rawDirect = localStorage.getItem(GAME_SYNC_CHANNEL_KEY);
     if (rawDirect) {
       const parsedDirect = JSON.parse(rawDirect);
