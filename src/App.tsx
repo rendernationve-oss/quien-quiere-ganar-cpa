@@ -46,7 +46,7 @@ import {
   LEGACY_STORAGE_KEY,
   GAME_SYNC_CHANNEL_KEY,
 } from './utils/broadcastSync';
-import { subscribeToGameState } from './utils/firebase';
+import { subscribeToGameState, pushGameState } from './utils/firebase';
 import { SplashScreen } from './components/SplashScreen';
 import { ClubLogo } from './components/ClubLogo';
 import { ShowLogo } from './components/ShowLogo';
@@ -71,8 +71,9 @@ import {
 } from './utils/logoStorage';
 
 const TOURNAMENT_STORAGE_KEY = 'puerto_azul_tournament_v2';
+const SYNC_DIRECT_CHANNEL = 'puerto_azul_direct_sync_channel';
 
-// Golden Cup Trophy Icon with rich gold gradients and authentic chalice shapes
+// Golden Cup Trophy Icon
 const GoldenCupIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
   <svg
     viewBox="0 0 24 24"
@@ -93,32 +94,24 @@ const GoldenCupIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5'
         <stop offset="100%" stopColor="#D97706" stopOpacity="0" />
       </linearGradient>
     </defs>
-
-    {/* Cup Left Handle */}
     <path
       d="M6.5 5.5C4 5.5 2.5 7.2 2.5 9.5C2.5 11.8 4.2 13.5 6.5 13.5V11.5C4.9 11.5 4.2 10.4 4.2 9.5C4.2 8.4 4.9 7.3 6.5 7.3V5.5Z"
       fill="url(#headerCupGold)"
       stroke="#B45309"
       strokeWidth="0.5"
     />
-
-    {/* Cup Right Handle */}
     <path
       d="M17.5 5.5C20 5.5 21.5 7.2 21.5 9.5C21.5 11.8 19.8 13.5 17.5 13.5V11.5C19.1 11.5 19.8 10.4 19.8 9.5C19.8 8.4 19.1 7.3 17.5 7.3V5.5Z"
       fill="url(#headerCupGold)"
       stroke="#B45309"
       strokeWidth="0.5"
     />
-
-    {/* Main Cup Body */}
     <path
       d="M6.5 4H17.5V9.5C17.5 13 15 15 12 15C9 15 6.5 13 6.5 9.5V4Z"
       fill="url(#headerCupGold)"
       stroke="#92400E"
       strokeWidth="0.6"
     />
-
-    {/* Cup Rim Lip */}
     <rect
       x="5.5"
       y="3"
@@ -129,38 +122,28 @@ const GoldenCupIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5'
       stroke="#B45309"
       strokeWidth="0.5"
     />
-
-    {/* Cup Front Shine */}
     <path
       d="M8 4.5H10.5C9.5 8 10 11.5 11.5 13.5C9.5 13 8 10.5 8 4.5Z"
       fill="url(#headerCupShine)"
     />
-
-    {/* Center Star Emblem */}
     <path
       d="M12 7.2L12.7 8.7L14.3 8.9L13.1 10.1L13.4 11.7L12 10.9L10.6 11.7L10.9 10.1L9.7 8.9L11.3 8.7L12 7.2Z"
       fill="#FFFBEB"
       stroke="#D97706"
       strokeWidth="0.3"
     />
-
-    {/* Stem */}
     <path
       d="M10.5 15H13.5V17.5H10.5V15Z"
       fill="url(#headerCupGold)"
       stroke="#B45309"
       strokeWidth="0.5"
     />
-
-    {/* Pedestal Tier */}
     <path
       d="M8.5 17.5H15.5L16.2 19.2H7.8L8.5 17.5Z"
       fill="url(#headerCupGold)"
       stroke="#92400E"
       strokeWidth="0.5"
     />
-
-    {/* Pedestal Base Slab */}
     <rect
       x="6.5"
       y="19.2"
@@ -175,9 +158,6 @@ const GoldenCupIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5'
 );
 
 export default function App() {
-  // Dual-View Mode State:
-  // - Modo Operador: default (shows moderator bar, controls, normal cursor)
-  // - Modo Pantalla Pública / Clean Feed: triggered if URL has ?view=display or via toggle
   const [isDisplayView, setIsDisplayView] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -186,7 +166,6 @@ export default function App() {
     return false;
   });
 
-  // Sync body class for display-view
   useEffect(() => {
     if (typeof document !== 'undefined') {
       if (isDisplayView) {
@@ -197,10 +176,8 @@ export default function App() {
     }
   }, [isDisplayView]);
 
-  // Read immediately stored sync state when opening ?view=display so it never starts in blank/out of sync
   const initialSyncState = isDisplayView ? getStoredGameState() : null;
 
-  // Participants Sessions State (5+ independent participant question sets)
   const [participants, setParticipants] = useState<ParticipantSession[]>(() => {
     if (initialSyncState?.participants && Array.isArray(initialSyncState.participants)) {
       return initialSyncState.participants;
@@ -240,7 +217,6 @@ export default function App() {
     }
   );
 
-  // Modals & Display State
   const [activeModal, setActiveModal] = useState<
     null | 'admin' | 'audience' | 'phone' | 'correct' | 'incorrect' | 'win' | 'tournament' | 'participants' | 'settings'
   >(() => {
@@ -257,10 +233,15 @@ export default function App() {
   );
   const [showLadderMobile, setShowLadderMobile] = useState<boolean>(false);
 
- const [showSplash, setShowSplash] = useState<boolean>(true);
- const [isInitialSplash, setIsInitialSplash] = useState<boolean>(true);
- 
-  // Listen to popstate or url changes for view mode
+  const [showSplash, setShowSplash] = useState<boolean>(() => {
+    if (initialSyncState?.showSplash !== undefined) return initialSyncState.showSplash;
+    if (initialSyncState?.gameStage) return initialSyncState.gameStage === 'SPLASH';
+    return true;
+  });
+  const [isInitialSplash, setIsInitialSplash] = useState<boolean>(true);
+
+  const directChannelRef = useRef<BroadcastChannel | null>(null);
+
   useEffect(() => {
     const checkView = () => {
       const params = new URLSearchParams(window.location.search);
@@ -270,18 +251,15 @@ export default function App() {
     return () => window.removeEventListener('popstate', checkView);
   }, []);
 
-  // Sync background tension music with current active question level
   useEffect(() => {
     if (!showSplash && revealedState === 'idle') {
       audioManager.startTensionForLevel(currentLevel);
     }
   }, [showSplash, currentLevel, revealedState]);
 
-  // Persistent Logo State - fixed always until admin modifies it
   const [logoConfig, setLogoConfig] = useState<LogoConfig>(getInitialLogoConfig);
 
   useEffect(() => {
-    // Asynchronously check persistent IndexedDB to ensure no quota or storage loss
     syncLogoFromPersistentDB((restored) => {
       setLogoConfig(restored);
     });
@@ -308,41 +286,34 @@ export default function App() {
     persistLogoConfig(newConfig);
   }, []);
 
-  // Active Participant Session
   const currentParticipant: ParticipantSession =
     participants[currentParticipantIndex] || participants[0];
 
-  // Active question for the current participant & level
   const currentQuestion: Question =
     currentParticipant.questions.find((q) => q.id === currentLevel) ||
     currentParticipant.questions[0];
 
-  // Current prize amount
   const currentPrize =
     PRIZE_LADDER.find((p) => p.level === currentLevel)?.amount || '100 Pts';
 
-  // Calculate guaranteed safe haven prize
   const getSecuredPrize = useCallback((): string => {
     if (currentLevel > 10) return '32.000 Pts (Seguro 2)';
     if (currentLevel > 5) return '1.000 Pts (Seguro 1)';
     return '0 Pts';
   }, [currentLevel]);
 
-  // Persist tournament sessions on change
   useEffect(() => {
     try {
       localStorage.setItem(TOURNAMENT_STORAGE_KEY, JSON.stringify(participants));
     } catch {}
   }, [participants]);
 
-  // Sound mute sync
   const toggleSound = () => {
     const next = !soundMuted;
     setSoundMuted(next);
     audioManager.setMuted(next);
   };
 
-  // Fullscreen toggle
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
@@ -361,7 +332,6 @@ export default function App() {
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
 
-  // Update participant progress in tournament list
   const updateParticipantRecord = useCallback(
     (
       status: 'in_progress' | 'eliminated' | 'completed',
@@ -386,7 +356,6 @@ export default function App() {
     [currentParticipantIndex, lifelines]
   );
 
-  // Unified GameState snapshot generator
   const getCurrentSnapshot = useCallback((): UnifiedGameState => {
     const stage: GameStage = showSplash ? 'SPLASH' : (currentLevel >= 15 && revealedState === 'correct') ? 'GAME_OVER' : 'PLAYING';
     const status: AnswerStatus = revealedState === 'idle'
@@ -402,13 +371,19 @@ export default function App() {
       clubLocation: 'NAIGUATÁ, VARGAS',
       clubName: 'CLUB PUERTO AZUL',
       gameStage: stage,
+      showSplash,
+      isInitialSplash,
+      actionType: 'SYNC_STATE',
       currentParticipant: currentParticipant || null,
       currentParticipantIndex,
       currentQuestionIndex: Math.max(0, currentLevel - 1),
       currentLevel,
       selectedAnswer: selectedOption,
+      selectedOption,
+      revealedState,
       answerStatus: status,
       revealedLifelines: lifelines,
+      lifelines,
       hiddenOptions,
       activeTimer: activeModal === 'phone' ? 30 : null,
       activeModal,
@@ -420,6 +395,7 @@ export default function App() {
     };
   }, [
     showSplash,
+    isInitialSplash,
     currentLevel,
     revealedState,
     logoConfig,
@@ -434,49 +410,72 @@ export default function App() {
     soundMuted,
   ]);
 
-  // Open Clean Feed Display in a new window/monitor using exact URL base and port
+  // Transmisor universal instantáneo: Direct BroadcastChannel + LocalStorage + Firebase RTDB
+  const syncBroadcast = useCallback((snapshot: UnifiedGameState, action?: string, payload?: any) => {
+    const payloadToSend = {
+      ...snapshot,
+      actionType: action || snapshot.actionType || 'SYNC_STATE',
+      payload: payload || null,
+      lastUpdated: Date.now(),
+    };
+
+    // 1. Canal directo rápido entre ventanas/pestañas
+    if (directChannelRef.current) {
+      try {
+        directChannelRef.current.postMessage({ type: 'DIRECT_SYNC', data: payloadToSend });
+      } catch (err) {
+        console.warn('DirectChannel post error:', err);
+      }
+    }
+
+    // 2. Modulo broadcastSync interno
+    broadcastGameState(payloadToSend, action, payload);
+
+    // 3. Firebase RTDB (respaldo remoto)
+    pushGameState(payloadToSend);
+  }, []);
+
   const handleOpenDisplayView = useCallback(() => {
-    broadcastGameState(getCurrentSnapshot());
+    const snap = getCurrentSnapshot();
+    syncBroadcast(snap);
     const targetUrl = new URL(window.location.href);
     targetUrl.searchParams.set('view', 'display');
     const win = window.open(targetUrl.toString(), 'PuertoAzulCleanFeed');
     if (win) {
       displayWindowRef.current = win;
     }
-  }, [getCurrentSnapshot]);
+  }, [getCurrentSnapshot, syncBroadcast]);
 
-  // Handle Start From Splash
   const handleStartFromSplash = useCallback(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('game_started_state', 'true');
     }
     setShowSplash(false);
     setIsInitialSplash(false);
-    // 1. Splash Screen / Intro: Al pulsar "INICIAR JUEGO" o entrar al juego, detén la intro con fade-out y reproduce 'presentacion'.
     audioManager.stopIntroWithFadeOut(() => {
       audioManager.playPresentacion();
       setTimeout(() => {
         audioManager.startTensionForLevel(currentLevel);
       }, 1200);
     });
-    broadcastGameState({
+
+    const nextSnapshot = {
       ...getCurrentSnapshot(),
-      gameStage: 'PLAYING',
+      gameStage: 'PLAYING' as GameStage,
       showSplash: false,
       isInitialSplash: false,
-    } as any);
-  }, [currentLevel, getCurrentSnapshot]);
+    };
+    syncBroadcast(nextSnapshot, 'START_GAME');
+  }, [currentLevel, getCurrentSnapshot, syncBroadcast]);
 
-  // Timestamp tracker to avoid re-applying stale snapshots
   const lastAppliedTimestampRef = useRef<number>(initialSyncState?.lastUpdated ?? 0);
   const displayWindowRef = useRef<Window | null>(null);
 
-  // Centralized State Application for Public Display Receiver
   const applyIncomingState = useCallback(
     (s: any) => {
       if (!s) return;
       const incomingTs = typeof s.lastUpdated === 'number' ? s.lastUpdated : (s.timestamp || 0);
-      if (incomingTs && incomingTs <= lastAppliedTimestampRef.current) {
+      if (incomingTs && incomingTs < lastAppliedTimestampRef.current && !s.actionType) {
         return;
       }
       if (incomingTs) {
@@ -489,15 +488,32 @@ export default function App() {
       if (typeof s.currentParticipantIndex === 'number') {
         setCurrentParticipantIndex(s.currentParticipantIndex);
       }
+
       if (typeof s.currentLevel === 'number') {
+        if (s.currentLevel !== currentLevel) {
+          setSelectedOption(null);
+          setRevealedState('idle');
+          setHiddenOptions([]);
+        }
         setCurrentLevel(s.currentLevel);
       } else if (typeof s.currentQuestionIndex === 'number') {
+        if (s.currentQuestionIndex + 1 !== currentLevel) {
+          setSelectedOption(null);
+          setRevealedState('idle');
+          setHiddenOptions([]);
+        }
         setCurrentLevel(s.currentQuestionIndex + 1);
       }
 
-      const incomingOption = s.selectedAnswer !== undefined ? s.selectedAnswer : s.selectedOption;
-      if (incomingOption !== undefined) {
-        setSelectedOption(incomingOption as OptionLetter | null);
+      if (s.actionType === 'NEXT_QUESTION') {
+        setSelectedOption(null);
+        setRevealedState('idle');
+        setHiddenOptions([]);
+      } else {
+        const incomingOption = s.selectedAnswer !== undefined ? s.selectedAnswer : s.selectedOption;
+        if (incomingOption !== undefined) {
+          setSelectedOption(incomingOption as OptionLetter | null);
+        }
       }
 
       if (s.answerStatus) {
@@ -518,7 +534,16 @@ export default function App() {
         setLifelines(incomingLifelines);
       }
 
-      if (s.activeModal !== undefined) {
+      if (
+        s.actionType === 'CLOSE_MODAL' ||
+        s.actionType === 'NEXT_QUESTION' ||
+        s.actionType === 'NEXT_PARTICIPANT' ||
+        s.actionType === 'RESTART_PARTICIPANT' ||
+        s.activeModal === null ||
+        s.activeModal === undefined
+      ) {
+        setActiveModal(null);
+      } else if (s.activeModal) {
         if (isDisplayView && (s.activeModal === 'admin' || s.activeModal === 'tournament')) {
           setActiveModal(null);
         } else {
@@ -526,21 +551,16 @@ export default function App() {
         }
       }
 
-      if (s.gameStage) {
-        if (s.gameStage === 'SPLASH') {
-          setShowSplash(true);
-        } else if (s.gameStage === 'PLAYING' && s.actionType === 'START_GAME') {
-          setShowSplash(false);
+      if (typeof s.showSplash === 'boolean') {
+        setShowSplash(s.showSplash);
+        if (!s.showSplash) {
           setIsInitialSplash(false);
         }
-      }
-      if (s.gameStage) {
-        if (s.gameStage === 'SPLASH') {
-          setShowSplash(true);
-        } else if (s.gameStage === 'PLAYING' && s.actionType === 'START_GAME') {
-          setShowSplash(false);
-          setIsInitialSplash(false);
-        }
+      } else if (s.gameStage === 'SPLASH') {
+        setShowSplash(true);
+      } else if (s.gameStage === 'PLAYING' || s.gameStage === 'GAME_OVER') {
+        setShowSplash(false);
+        setIsInitialSplash(false);
       }
 
       if (s.logoConfig) {
@@ -556,7 +576,6 @@ export default function App() {
         setProjectorMode(s.projectorMode);
       }
 
-      // Audio effects mirroring operator actions
       if (s.actionType === 'START_GAME' || (s.gameStage === 'PLAYING' && showSplash)) {
         audioManager.stopIntroWithFadeOut(() => {
           audioManager.playPresentacion();
@@ -574,6 +593,10 @@ export default function App() {
           audioManager.playFallo(s.payload?.level || s.currentLevel || currentLevel);
         }
       } else if (s.actionType === 'NEXT_QUESTION') {
+        setSelectedOption(null);
+        setRevealedState('idle');
+        setHiddenOptions([]);
+        if (s.currentLevel) setCurrentLevel(s.currentLevel);
         audioManager.playSiguiente();
         setTimeout(() => {
           audioManager.startTensionForLevel(s.currentLevel || currentLevel);
@@ -598,11 +621,27 @@ export default function App() {
     [isDisplayView, currentLevel, showSplash]
   );
 
-  // 2. RECEPTOR (?view=display): Primary Firebase RTDB Subscription + Hybrid Fallbacks
+  // Inicializar comunicación entre pantallas (BroadcastChannel activo siempre)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      const directChan = new BroadcastChannel(SYNC_DIRECT_CHANNEL);
+      directChannelRef.current = directChan;
+
+      directChan.onmessage = (event) => {
+        if (event.data?.type === 'DIRECT_SYNC' && event.data?.data) {
+          applyIncomingState(event.data.data);
+        }
+      };
+    }
+
+    return () => {
+      directChannelRef.current?.close();
+    };
+  }, [applyIncomingState]);
+
   useEffect(() => {
     if (!isDisplayView) return;
 
-    // Primary Real-time Network Channel: Firebase Realtime Database
     const unsubscribeFirebase = subscribeToGameState((firebaseState) => {
       if (firebaseState) {
         applyIncomingState(firebaseState);
@@ -616,18 +655,15 @@ export default function App() {
     };
     window.addEventListener('message', handleWindowMessage);
 
-    // a) Immediate read upon mount: DEBE leer obligatoriamente 'puerto_azul_live_state' desde localStorage
     const initialData = getStoredGameState();
     if (initialData) {
       applyIncomingState(initialData);
     }
 
-    // b) BroadcastChannel Listener: aplica los cambios recibidos al instante
     const unsubscribeBroadcast = gameBroadcast.subscribe((state) => {
       applyIncomingState(state);
     });
 
-    // c) LocalStorage Event Listener: escucha cambios de 'game_sync_channel', 'puerto_azul_live_state' y legacy
     const handleStorageChange = (e: StorageEvent) => {
       if (
         (e.key === GAME_SYNC_CHANNEL_KEY || e.key === LIVE_STORAGE_KEY || e.key === LEGACY_STORAGE_KEY) &&
@@ -643,7 +679,16 @@ export default function App() {
     };
     window.addEventListener('storage', handleStorageChange);
 
-    // d) Polling Fallback: un setInterval de 100ms que compare la marca de tiempo en localStorage y actualice el estado si cambió
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const snap = getStoredGameState();
+        if (snap) {
+          applyIncomingState(snap);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     const pollInterval = setInterval(() => {
       try {
         const raw =
@@ -672,16 +717,16 @@ export default function App() {
       window.removeEventListener('message', handleWindowMessage);
       unsubscribeBroadcast();
       window.removeEventListener('storage', handleStorageChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(pollInterval);
     };
   }, [isDisplayView, applyIncomingState]);
 
-  // 1. EMISOR (Ventana del Operador): Guardar y transmitir automáticamente cada cambio de estado
   useEffect(() => {
     if (!isDisplayView) {
       const snapshot = getCurrentSnapshot();
-      broadcastGameState(snapshot);
-      if (displayWindowRef.current && !displayWindowRef.current.closed) {
+      syncBroadcast(snapshot);
+      if (displayWindowRef.current) {
         displayWindowRef.current.postMessage({ type: 'SYNC_STATE', payload: snapshot }, '*');
       }
     }
@@ -700,25 +745,24 @@ export default function App() {
     logoConfig,
     projectorMode,
     getCurrentSnapshot,
+    syncBroadcast,
   ]);
 
-  // Handle Option Click / Confirmation logic:
-  // 1st click: selects option -> turns NARANJA (glow-selected-orange)
-  // 2nd click on the same option: confirms!
-  // If correct: turns VERDE (glow-correct-green), opens CorrectModal.
-  // If incorrect: turns ROJO (glow-wrong-red), opens IncorrectModal.
   const handleSelectOption = (letter: OptionLetter) => {
     if (isDisplayView || revealedState !== 'idle' || hiddenOptions.includes(letter)) return;
 
     if (selectedOption !== letter) {
       setSelectedOption(letter);
       audioManager.playSelect();
-      // 3. Selección de respuesta (Amarillo): Baja el volumen de la pista de tensión activa al 30% mientras se espera la confirmación dramática.
       audioManager.lowerTensionVolume();
-      broadcastGameState(
+      syncBroadcast(
         {
           ...getCurrentSnapshot(),
           selectedOption: letter,
+          selectedAnswer: letter,
+          answerStatus: 'selected',
+          revealedState: 'selected',
+          lastUpdated: Date.now(),
         },
         'SELECT_OPTION',
         { letter }
@@ -733,10 +777,12 @@ export default function App() {
     const isCorrect = letter === currentQuestion.correctAnswer;
     const secured = getSecuredPrize();
 
-    broadcastGameState(
+    syncBroadcast(
       {
         ...getCurrentSnapshot(),
         revealedState: isCorrect ? 'correct' : 'incorrect',
+        answerStatus: isCorrect ? 'correct' : 'wrong',
+        lastUpdated: Date.now(),
       },
       'CONFIRM_ANSWER',
       {
@@ -750,7 +796,6 @@ export default function App() {
 
     if (isCorrect) {
       setRevealedState('correct');
-      // 4. Revelación de Acierto (Verde): Detén la pista de tensión y reproduce 'acierto'.
       audioManager.playAcierto();
 
       setTimeout(() => {
@@ -765,11 +810,8 @@ export default function App() {
       }, 1000);
     } else {
       setRevealedState('incorrect');
-      // 5. Revelación de Error (Rojo): Detén la pista de tensión. Si es entre 1 y 14 reproduce 'fallo', si es 15 reproduce 'fallo15'.
       audioManager.playFallo(currentLevel);
 
-      // Suspenso dramático: mantener visible durante exactamente 5 segundos (5000 ms)
-      // la respuesta seleccionada (en rojo) y la correcta (en verde) antes de mostrar el modal
       setTimeout(() => {
         updateParticipantRecord('eliminated', currentLevel, secured);
         setActiveModal('incorrect');
@@ -777,12 +819,9 @@ export default function App() {
     }
   };
 
-  // Next Question for the current participant
   const handleNextQuestion = () => {
     setActiveModal(null);
-    broadcastGameState({ ...getCurrentSnapshot(), activeModal: null }, 'CLOSE_MODAL');
     if (currentLevel < 15) {
-      // 4. Al pulsar "Siguiente Pregunta", reproduce 'siguiente' antes de reiniciar la música del nivel correspondiente.
       audioManager.playSiguiente();
       const nextLvl = currentLevel + 1;
       setCurrentLevel(nextLvl);
@@ -793,14 +832,17 @@ export default function App() {
       setTimeout(() => {
         audioManager.startTensionForLevel(nextLvl);
       }, 800);
-      broadcastGameState(
+      syncBroadcast(
         {
           ...getCurrentSnapshot(),
           activeModal: null,
           currentLevel: nextLvl,
           selectedOption: null,
+          selectedAnswer: null,
           revealedState: 'idle',
+          answerStatus: 'idle',
           hiddenOptions: [],
+          lastUpdated: Date.now(),
         },
         'NEXT_QUESTION',
         { level: nextLvl }
@@ -808,7 +850,6 @@ export default function App() {
     }
   };
 
-  // Switch to Next Participant in Tournament
   const handleNextParticipant = () => {
     setActiveModal(null);
     const nextIdx = (currentParticipantIndex + 1) % participants.length;
@@ -822,25 +863,27 @@ export default function App() {
     audioManager.playIntroSplash();
     setShowSplash(true);
     setIsInitialSplash(false);
-    broadcastGameState(
+    syncBroadcast(
       {
         ...getCurrentSnapshot(),
         activeModal: null,
         currentParticipantIndex: nextIdx,
         currentLevel: 1,
         selectedOption: null,
+        selectedAnswer: null,
         revealedState: 'idle',
+        answerStatus: 'idle',
         hiddenOptions: [],
         lifelines: { fiftyFifty: false, audience: false, phone: false },
         showSplash: true,
         isInitialSplash: false,
+        lastUpdated: Date.now(),
       },
       'NEXT_PARTICIPANT',
       { index: nextIdx }
     );
   };
 
-  // Switch to specific participant
   const handleSelectParticipant = (index: number) => {
     setActiveModal(null);
     setCurrentParticipantIndex(index);
@@ -848,30 +891,32 @@ export default function App() {
     setSelectedOption(null);
     setRevealedState('idle');
     setHiddenOptions([]);
-    setLifelines({ fiftyFifty: false, audience: false, phone: false });
+    setLifelines({ border: false, fiftyFifty: false, audience: false, phone: false } as any);
     audioManager.stopTension();
     audioManager.playIntroSplash();
     setShowSplash(true);
     setIsInitialSplash(false);
-    broadcastGameState(
+    syncBroadcast(
       {
         ...getCurrentSnapshot(),
         activeModal: null,
         currentParticipantIndex: index,
         currentLevel: 1,
         selectedOption: null,
+        selectedAnswer: null,
         revealedState: 'idle',
+        answerStatus: 'idle',
         hiddenOptions: [],
         lifelines: { fiftyFifty: false, audience: false, phone: false },
         showSplash: true,
         isInitialSplash: false,
+        lastUpdated: Date.now(),
       },
       'SELECT_PARTICIPANT',
       { index }
     );
   };
 
-  // Restart current participant's session
   const handleRestartCurrentParticipant = () => {
     setActiveModal(null);
     setCurrentLevel(1);
@@ -884,23 +929,25 @@ export default function App() {
     audioManager.playIntroSplash();
     setShowSplash(true);
     setIsInitialSplash(false);
-    broadcastGameState(
+    syncBroadcast(
       {
         ...getCurrentSnapshot(),
         activeModal: null,
         currentLevel: 1,
         selectedOption: null,
+        selectedAnswer: null,
         revealedState: 'idle',
+        answerStatus: 'idle',
         hiddenOptions: [],
         lifelines: { fiftyFifty: false, audience: false, phone: false },
         showSplash: true,
         isInitialSplash: false,
+        lastUpdated: Date.now(),
       },
       'RESTART_PARTICIPANT'
     );
   };
 
-  // Lifelines
   const handleUseFiftyFifty = () => {
     if (isDisplayView || lifelines.fiftyFifty || revealedState !== 'idle') return;
     const incorrectLetters = (['A', 'B', 'C', 'D'] as OptionLetter[]).filter(
@@ -911,7 +958,6 @@ export default function App() {
 
     setHiddenOptions(eliminated);
     setLifelines((prev) => ({ ...prev, fiftyFifty: true }));
-    // 6. Al pulsar 50:50: Reproduce 'comodin5050' (sin cortar la tensión de fondo).
     audioManager.playComodin5050();
 
     let nextSelected = selectedOption;
@@ -920,12 +966,14 @@ export default function App() {
       setSelectedOption(null);
       audioManager.restoreTensionVolume();
     }
-    broadcastGameState(
+    syncBroadcast(
       {
         ...getCurrentSnapshot(),
         hiddenOptions: eliminated,
         lifelines: { ...lifelines, fiftyFifty: true },
         selectedOption: nextSelected,
+        selectedAnswer: nextSelected,
+        lastUpdated: Date.now(),
       },
       'USE_FIFTY_FIFTY',
       { eliminated }
@@ -935,14 +983,14 @@ export default function App() {
   const handleUseAudience = () => {
     if (isDisplayView || lifelines.audience || revealedState !== 'idle') return;
     setLifelines((prev) => ({ ...prev, audience: true }));
-    // 6. Al pulsar Audiencia: Reproduce 'audiencia'.
     audioManager.playAudiencia();
     setActiveModal('audience');
-    broadcastGameState(
+    syncBroadcast(
       {
         ...getCurrentSnapshot(),
         lifelines: { ...lifelines, audience: true },
         activeModal: 'audience',
+        lastUpdated: Date.now(),
       },
       'USE_AUDIENCE'
     );
@@ -953,17 +1001,17 @@ export default function App() {
     setLifelines((prev) => ({ ...prev, phone: true }));
     audioManager.playPhoneRing();
     setActiveModal('phone');
-    broadcastGameState(
+    syncBroadcast(
       {
         ...getCurrentSnapshot(),
         lifelines: { ...lifelines, phone: true },
         activeModal: 'phone',
+        lastUpdated: Date.now(),
       },
       'USE_PHONE'
     );
   };
 
-  // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -971,12 +1019,10 @@ export default function App() {
 
       const key = e.key.toUpperCase();
 
-      // In Public Display Mode, disable normal input keys to prevent accidental audience clicks
       if (isDisplayView) {
         if (key === 'F') {
           toggleFullscreen();
         } else if (key === 'D' || e.key === 'Escape') {
-          // Allow switching back to Operator Mode if testing on same tab
           window.history.replaceState({}, '', window.location.pathname);
           setIsDisplayView(false);
         }
@@ -1021,11 +1067,11 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedOption, revealedState, activeModal, currentQuestion, lifelines, isDisplayView, showSplash, handleStartFromSplash]);
 
-  // Admin Actions
   const handleSaveParticipantName = (index: number, newName: string) => {
     setParticipants((prev) => {
       const updated = prev.map((p, idx) => (idx === index ? { ...p, name: newName } : p));
       gameBroadcast.send('UPDATE_PARTICIPANTS', updated);
+      pushGameState({ participants: updated, lastUpdated: Date.now() });
       return updated;
     });
   };
@@ -1043,6 +1089,7 @@ export default function App() {
           : p
       );
       gameBroadcast.send('UPDATE_PARTICIPANTS', updated);
+      pushGameState({ participants: updated, lastUpdated: Date.now() });
       return updated;
     });
   };
@@ -1063,6 +1110,7 @@ export default function App() {
     setParticipants((prev) => {
       const updated = [...prev, newSession];
       gameBroadcast.send('UPDATE_PARTICIPANTS', updated);
+      pushGameState({ participants: updated, lastUpdated: Date.now() });
       return updated;
     });
   };
@@ -1075,6 +1123,7 @@ export default function App() {
     setParticipants((prev) => {
       const updated = prev.filter((_, idx) => idx !== index);
       gameBroadcast.send('UPDATE_PARTICIPANTS', updated);
+      pushGameState({ participants: updated, lastUpdated: Date.now() });
       return updated;
     });
     if (currentParticipantIndex >= participants.length - 1) {
@@ -1090,13 +1139,26 @@ export default function App() {
       localStorage.removeItem(TOURNAMENT_STORAGE_KEY);
     } catch {}
     gameBroadcast.send('UPDATE_PARTICIPANTS', INITIAL_PARTICIPANTS);
+    pushGameState({ participants: INITIAL_PARTICIPANTS, currentParticipantIndex: 0, currentLevel: 1, lastUpdated: Date.now() });
   };
 
   const handleImportTournament = (imported: ParticipantSession[]) => {
     setParticipants(imported);
     setCurrentParticipantIndex(0);
     setCurrentLevel(1);
-    gameBroadcast.send('UPDATE_PARTICIPANTS', imported);
+    setShowSplash(true);
+    setIsInitialSplash(true);
+
+    const snapshot: UnifiedGameState = {
+      ...getCurrentSnapshot(),
+      participants: imported,
+      currentParticipantIndex: 0,
+      currentLevel: 1,
+      showSplash: true,
+      gameStage: 'SPLASH',
+      lastUpdated: Date.now(),
+    };
+    syncBroadcast(snapshot, 'IMPORT_TOURNAMENT');
   };
 
   const handleJumpToParticipantAndLevel = (partIdx: number, lvl: number) => {
@@ -1105,13 +1167,16 @@ export default function App() {
     setSelectedOption(null);
     setRevealedState('idle');
     setHiddenOptions([]);
-    broadcastGameState({
+    syncBroadcast({
       ...getCurrentSnapshot(),
       currentParticipantIndex: partIdx,
       currentLevel: lvl,
       selectedAnswer: null,
+      selectedOption: null,
       answerStatus: 'idle',
+      revealedState: 'idle',
       hiddenOptions: [],
+      lastUpdated: Date.now(),
     });
   };
 
@@ -1128,22 +1193,18 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  // Next participant label for buttons
   const nextParticipant =
     participants[(currentParticipantIndex + 1) % participants.length];
 
-  // Bloqueo estricto: mientras showSplash sea true, NUNCA se dibuja el juego ni la cabecera
+  const canShowCorrectAnswer = !isDisplayView || revealedState === 'correct' || revealedState === 'incorrect';
+
   if (showSplash) {
     return (
-      <div className="min-h-screen bg-[#040217] text-white">
+      <div className="min-h-screen bg-[#040217] text-white relative">
         {isDisplayView && (
           <style>{`
             html, body, #root, * {
-              cursor: none !important;
-              user-select: none !important;
-            }
-            body.display-view, body.display-view * {
-              pointer-events: none !important;
+              cursor: default !important;
               user-select: none !important;
             }
           `}</style>
@@ -1167,6 +1228,53 @@ export default function App() {
           onOpenParticipantModal={() => setActiveModal('tournament')}
           onOpenSettingsModal={() => setActiveModal('admin')}
         />
+
+        {/* Botón de pantalla completa para modo Display View en el Splash */}
+        {isDisplayView && (
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="fixed top-4 right-4 z-50 p-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white backdrop-blur-md border border-cyan-500/30 transition shadow-lg pointer-events-auto cursor-pointer"
+            title="Pantalla Completa [F]"
+          >
+            {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+          </button>
+        )}
+
+        {/* Modales activos desde el Splash Screen */}
+        {!isDisplayView && activeModal === 'tournament' && (
+          <TournamentModal
+            participants={participants}
+            currentParticipantIndex={currentParticipantIndex}
+            onSelectParticipant={handleSelectParticipant}
+            onAddParticipant={handleAddParticipant}
+            onResetTournament={handleRestoreDefaults}
+            onClose={() => {
+              setActiveModal(null);
+              gameBroadcast.send('CLOSE_MODAL');
+            }}
+          />
+        )}
+
+        {!isDisplayView && activeModal === 'admin' && (
+          <AdminModal
+            participants={participants}
+            currentParticipantIndex={currentParticipantIndex}
+            logoConfig={logoConfig}
+            onUpdateLogo={handleUpdateLogo}
+            onSaveParticipantName={handleSaveParticipantName}
+            onSaveQuestion={handleSaveQuestion}
+            onAddParticipant={handleAddParticipant}
+            onDeleteParticipant={handleDeleteParticipant}
+            onRestoreDefaults={handleRestoreDefaults}
+            onImportTournament={handleImportTournament}
+            onJumpToParticipantAndLevel={handleJumpToParticipantAndLevel}
+            onClose={() => {
+              setActiveModal(null);
+              gameBroadcast.send('CLOSE_MODAL');
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -1180,11 +1288,6 @@ export default function App() {
       {isDisplayView && (
         <style>{`
           html, body, #root, * {
-            cursor: none !important;
-            user-select: none !important;
-          }
-          body.display-view, body.display-view * {
-            pointer-events: none !important;
             user-select: none !important;
           }
         `}</style>
@@ -1200,10 +1303,10 @@ export default function App() {
         {/* Left: Brand */}
         <div className="flex items-center gap-3">
           <img
-  src="/header_logo.png"
-  alt="Club Puerto Azul"
-  className="h-12 w-auto object-contain drop-shadow-[0_0_12px_rgba(59,130,246,0.4)] select-none pointer-events-none"
-/>
+            src="/header_logo.png"
+            alt="Club Puerto Azul"
+            className="h-12 w-auto object-contain drop-shadow-[0_0_12px_rgba(59,130,246,0.4)] select-none pointer-events-none"
+          />
           <div>
             <h1 className="text-xs sm:text-sm md:text-base font-black tracking-wider text-cyan-200 uppercase font-['Orbitron',sans-serif] drop-shadow-md">
               ¿Quién Quiere Ganar en Puerto Azul?
@@ -1217,7 +1320,6 @@ export default function App() {
         {/* Right: Controls & Indicators */}
         {!isDisplayView ? (
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Botón Destacado: Abrir Pantalla Pública / Proyector (Clean Feed) */}
             <button
               type="button"
               onClick={handleOpenDisplayView}
@@ -1229,7 +1331,6 @@ export default function App() {
               <ExternalLink className="w-3.5 h-3.5 text-cyan-300 group-hover:text-white shrink-0" />
             </button>
 
-            {/* Participant Number Indicator: User icon and participant number without '#' */}
             <button
               type="button"
               onClick={() => setActiveModal('tournament')}
@@ -1242,7 +1343,6 @@ export default function App() {
               </span>
             </button>
 
-            {/* Tournament Button: Golden Cup with circular golden/amber border matching reference */}
             <button
               type="button"
               onClick={() => setActiveModal('tournament')}
@@ -1252,13 +1352,13 @@ export default function App() {
               <GoldenCupIcon className="w-5 h-5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]" />
             </button>
 
-            {/* Projector Mode Toggle */}
             <button
               type="button"
               onClick={() => {
                 const next = !projectorMode;
                 setProjectorMode(next);
                 gameBroadcast.send('SET_PROJECTOR_MODE', next);
+                pushGameState({ projectorMode: next });
               }}
               title="Modo Proyector (Textos aumentados)"
               className={`h-9 w-9 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer ${
@@ -1270,7 +1370,6 @@ export default function App() {
               <Tv className="w-4 h-4" />
             </button>
 
-            {/* Sound Toggle */}
             <button
               type="button"
               onClick={toggleSound}
@@ -1280,7 +1379,6 @@ export default function App() {
               {soundMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-cyan-300" />}
             </button>
 
-            {/* Fullscreen Toggle */}
             <button
               type="button"
               onClick={toggleFullscreen}
@@ -1290,7 +1388,6 @@ export default function App() {
               {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
             </button>
 
-            {/* Ladder on Mobile */}
             <button
               type="button"
               onClick={() => setShowLadderMobile(!showLadderMobile)}
@@ -1300,7 +1397,6 @@ export default function App() {
               <ListOrdered className="w-4 h-4" />
             </button>
 
-            {/* Splash Screen / Presentation Curtain Toggle */}
             <button
               type="button"
               onClick={() => {
@@ -1309,6 +1405,7 @@ export default function App() {
                 audioManager.stopTension();
                 audioManager.playIntroSplash();
                 gameBroadcast.send('SHOW_SPLASH');
+                pushGameState({ showSplash: true, isInitialSplash: false, gameStage: 'SPLASH' });
               }}
               title="Mostrar Cortinilla de Presentación (Splash Screen)"
               className="h-9 w-9 rounded-xl bg-slate-800/80 text-cyan-300 hover:text-white hover:bg-slate-700 transition flex items-center justify-center cursor-pointer shadow-sm"
@@ -1316,7 +1413,6 @@ export default function App() {
               <Play className="w-4 h-4 fill-current" />
             </button>
 
-            {/* Admin Modal Button: only gear icon with TV/sound aesthetic */}
             <button
               type="button"
               onClick={() => setActiveModal('admin')}
@@ -1327,34 +1423,37 @@ export default function App() {
             </button>
           </div>
         ) : (
-          /* En Modo Pantalla Pública (Clean Feed): Oculta por completo los controles de moderación */
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-[10px] font-bold text-cyan-300 tracking-wider uppercase font-['Orbitron',sans-serif]">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span>En Vivo · Clean Feed</span>
             </div>
+            {/* Botón de pantalla completa integrado directamente en Display View */}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              title="Pantalla Completa [F]"
+              className="h-8 px-2.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-cyan-200 border border-cyan-500/30 transition flex items-center gap-1.5 cursor-pointer shadow-md"
+            >
+              {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
+              <span className="text-[11px] font-semibold">{isFullscreen ? 'Salir' : 'Completa'}</span>
+            </button>
           </div>
         )}
       </header>
 
       {/* MAIN GAME STAGE */}
-      <main className="relative z-20 flex-1 flex flex-col lg:flex-row items-center justify-center p-3 sm:p-5 md:p-6 max-w-7xl mx-auto w-full gap-4 md:gap-8">
-        
-        {/* CENTER ARENA: Logo, Lifelines, Question Box, 4 Options in 2 Rows */}
-        <div className="flex-1 w-full flex flex-col items-center justify-center max-w-4xl">
-          
-          {/* Logo & Current Prize Banner */}
-          <div className="relative mb-1 md:mb-2 flex flex-col items-center">
-            {/* Medallón Oficial del Concurso */}
-            <div className="w-40 h-40 sm:w-48 sm:h-48 md:w-56 md:h-56 relative flex items-center justify-center">
+      <main className="relative z-20 flex-1 flex flex-col sm:flex-row items-center justify-center p-2 sm:p-3 md:p-6 max-w-7xl mx-auto w-full gap-2 sm:gap-4 md:gap-8 overflow-hidden">
+        <div className="flex-1 w-full flex flex-col items-center justify-center max-w-4xl scale-95 sm:scale-90 md:scale-100 origin-center">
+          <div className="relative mb-0 sm:mb-1 md:mb-2 flex flex-col items-center">
+            <div className="w-24 h-24 sm:w-28 sm:h-28 md:w-56 md:h-56 relative flex items-center justify-center">
               <img 
-                src="/show_logo.png" 
+                src="/Quien_Logo.png" 
                 alt="Quién Quiere Ganar" 
                 className="w-full h-full object-contain drop-shadow-[0_0_25px_rgba(6,182,212,0.6)] select-none pointer-events-none" 
               />
             </div>
 
-            {/* Current Level Prize Tag */}
             <div className="mt-2 inline-flex items-center gap-2 px-4 py-1 rounded-full bg-slate-950/80 border border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.3)]">
               <span className="text-[10px] md:text-xs font-bold text-slate-300 uppercase tracking-wider">
                 Premio en Juego:
@@ -1365,7 +1464,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Lifelines Bar */}
           <LifelinesBar
             lifelines={lifelines}
             onUseFiftyFifty={handleUseFiftyFifty}
@@ -1375,22 +1473,19 @@ export default function App() {
             isDisplayView={isDisplayView}
           />
 
-          {/* Question Box (Precision Lozenge matching reference image) */}
           <QuestionBox
             levelNumber={currentLevel}
             questionText={currentQuestion.question}
           />
 
-          {/* Options Grid: 2 Double-Capsule Vector SVG Rows */}
-          <div className="w-full max-w-5xl my-2 space-y-2 sm:space-y-3">
-            {/* ROW 1: Options A & B */}
+          <div key={currentLevel} className="w-full max-w-5xl my-2 space-y-2 sm:space-y-3">
             <OptionsRow
               rowId="row-ab"
               leftOption={{
                 letter: 'A',
                 text: currentQuestion.options.A,
                 isSelected: selectedOption === 'A',
-                isCorrect: currentQuestion.correctAnswer === 'A',
+                isCorrect: canShowCorrectAnswer && currentQuestion.correctAnswer === 'A',
                 isEliminated: hiddenOptions.includes('A'),
                 onClick: () => handleSelectOption('A'),
               }}
@@ -1398,21 +1493,20 @@ export default function App() {
                 letter: 'B',
                 text: currentQuestion.options.B,
                 isSelected: selectedOption === 'B',
-                isCorrect: currentQuestion.correctAnswer === 'B',
+                isCorrect: canShowCorrectAnswer && currentQuestion.correctAnswer === 'B',
                 isEliminated: hiddenOptions.includes('B'),
                 onClick: () => handleSelectOption('B'),
               }}
               revealedState={revealedState}
             />
 
-            {/* ROW 2: Options C & D */}
             <OptionsRow
               rowId="row-cd"
               leftOption={{
                 letter: 'C',
                 text: currentQuestion.options.C,
                 isSelected: selectedOption === 'C',
-                isCorrect: currentQuestion.correctAnswer === 'C',
+                isCorrect: canShowCorrectAnswer && currentQuestion.correctAnswer === 'C',
                 isEliminated: hiddenOptions.includes('C'),
                 onClick: () => handleSelectOption('C'),
               }}
@@ -1420,7 +1514,7 @@ export default function App() {
                 letter: 'D',
                 text: currentQuestion.options.D,
                 isSelected: selectedOption === 'D',
-                isCorrect: currentQuestion.correctAnswer === 'D',
+                isCorrect: canShowCorrectAnswer && currentQuestion.correctAnswer === 'D',
                 isEliminated: hiddenOptions.includes('D'),
                 onClick: () => handleSelectOption('D'),
               }}
@@ -1429,12 +1523,10 @@ export default function App() {
           </div>
         </div>
 
-        {/* SIDEBAR: Prize Ladder (Desktop / Projector) */}
-        <aside className="hidden lg:block w-72 shrink-0">
+        <aside className="hidden sm:block w-52 lg:w-72 shrink-0 scale-90 lg:scale-100 origin-right">
           <PrizeLadder currentLevel={currentLevel} />
         </aside>
 
-        {/* MOBILE / TABLET DRAWER OVERLAY FOR LADDER */}
         {showLadderMobile && (
           <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-md p-4 flex items-center justify-center lg:hidden">
             <div className="w-full max-w-sm bg-[#050b1d] border-2 border-cyan-400 rounded-2xl p-4 shadow-2xl">
@@ -1456,7 +1548,7 @@ export default function App() {
         )}
       </main>
 
-      {/* FOOTER BAR: Fast Status & Controls */}
+      {/* FOOTER BAR */}
       <footer className="relative z-30 w-full bg-[#030612]/95 border-t border-cyan-500/20 px-4 py-2 flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
         <div className="flex items-center gap-3">
           <span className="text-amber-300 font-bold font-['Orbitron',sans-serif]">
@@ -1491,7 +1583,6 @@ export default function App() {
       </footer>
 
       {/* MODALS */}
-      {/* 1. Correct Modal */}
       {activeModal === 'correct' && (
         <CorrectModal
           levelNumber={currentLevel}
@@ -1500,7 +1591,6 @@ export default function App() {
         />
       )}
 
-      {/* 2. Incorrect Modal (Supports moving directly to next participant!) */}
       {activeModal === 'incorrect' && (
         <IncorrectModal
           participantName={currentParticipant.name}
@@ -1516,7 +1606,6 @@ export default function App() {
         />
       )}
 
-      {/* 3. Ultimate Winner Modal (Supports moving directly to next participant!) */}
       {activeModal === 'win' && (
         <WinModal
           participantName={currentParticipant.name}
@@ -1527,29 +1616,26 @@ export default function App() {
         />
       )}
 
-      {/* 4. Lifeline: Audience Modal */}
       {activeModal === 'audience' && (
         <AudienceModal
           correctOption={currentQuestion.correctAnswer}
           onClose={() => {
             setActiveModal(null);
-            gameBroadcast.send('CLOSE_MODAL');
+            syncBroadcast({ ...getCurrentSnapshot(), activeModal: null }, 'CLOSE_MODAL');
           }}
         />
       )}
 
-      {/* 5. Lifeline: Phone Modal */}
       {activeModal === 'phone' && (
         <PhoneModal
           correctOption={currentQuestion.correctAnswer}
           onClose={() => {
             setActiveModal(null);
-            gameBroadcast.send('CLOSE_MODAL');
+            syncBroadcast({ ...getCurrentSnapshot(), activeModal: null }, 'CLOSE_MODAL');
           }}
         />
       )}
 
-      {/* 6. Tournament Sessions Modal (Hidden in Clean Feed) */}
       {!isDisplayView && activeModal === 'tournament' && (
         <TournamentModal
           participants={participants}
@@ -1564,7 +1650,6 @@ export default function App() {
         />
       )}
 
-      {/* 7. Admin Panel Modal (Hidden in Clean Feed) */}
       {!isDisplayView && activeModal === 'admin' && (
         <AdminModal
           participants={participants}
