@@ -539,10 +539,15 @@ export default function App() {
         s.actionType === 'NEXT_QUESTION' ||
         s.actionType === 'NEXT_PARTICIPANT' ||
         s.actionType === 'RESTART_PARTICIPANT' ||
-        s.activeModal === null ||
-        s.activeModal === undefined
+        !s.activeModal
       ) {
         setActiveModal(null);
+      } else if (s.activeModal) {
+        if (isDisplayView && (s.activeModal === 'admin' || s.activeModal === 'tournament')) {
+          setActiveModal(null);
+        } else {
+          setActiveModal(s.activeModal as any);
+        }
       } else if (s.activeModal) {
         if (isDisplayView && (s.activeModal === 'admin' || s.activeModal === 'tournament')) {
           setActiveModal(null);
