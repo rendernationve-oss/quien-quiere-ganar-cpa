@@ -93,11 +93,10 @@ export const ShowLogo: React.FC<ShowLogoProps> = ({
         setInternalConfig(updated);
         persistLogoConfig(updated);
         onUpdateLogo?.(updated);
-        setSuccessToast('¡Logotipo fijado permanentemente con éxito!');
+        setSuccessToast('¡Logotipo fijado con éxito!');
         setTimeout(() => setSuccessToast(null), 3000);
       } catch (err) {
-        console.error('Error optimizing image:', err);
-        alert('No se pudo procesar la imagen seleccionada. Por favor intenta con otra.');
+        alert('No se pudo procesar la imagen seleccionada.');
       } finally {
         setIsOptimizing(false);
       }
@@ -113,7 +112,7 @@ export const ShowLogo: React.FC<ShowLogoProps> = ({
     setInternalConfig(updated);
     persistLogoConfig(updated);
     onUpdateLogo?.(updated);
-    setSuccessToast(`¡Logotipo fijado en modo: ${mode === 'custom' ? 'Imagen personalizada' : mode}!`);
+    setSuccessToast('Logotipo actualizado.');
     setTimeout(() => setSuccessToast(null), 3000);
   };
 
@@ -122,7 +121,7 @@ export const ShowLogo: React.FC<ShowLogoProps> = ({
     setInternalConfig(def);
     setPreviewCustom(null);
     onUpdateLogo?.(def);
-    setSuccessToast('Logotipo restaurado al diseño oficial de Puerto Azul.');
+    setSuccessToast('Logotipo restaurado.');
     setTimeout(() => setSuccessToast(null), 3000);
   };
 
@@ -143,14 +142,14 @@ export const ShowLogo: React.FC<ShowLogoProps> = ({
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
-            title="Personalizar Logotipo Fijo (Permanente)"
+            title="Personalizar Logotipo"
             className="absolute -top-1 -right-1 z-30 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1.5 rounded-full bg-slate-900/90 border border-amber-400/80 text-amber-300 hover:text-white hover:bg-slate-800 shadow-lg cursor-pointer"
           >
             <Camera className="w-3.5 h-3.5" />
           </button>
         )}
 
-        {/* LOGO CONTENT DISPLAY */}
+        {/* Renderizado de imagen directa */}
         {activeConfig.mode === 'custom' && activeConfig.customImageData ? (
           <div
             onClick={() => !isDisplayView && setIsModalOpen(true)}
@@ -162,61 +161,111 @@ export const ShowLogo: React.FC<ShowLogoProps> = ({
               src={activeConfig.customImageData}
               alt="Logotipo Personalizado"
               className="w-full h-full object-contain filter drop-shadow-[0_0_15px_rgba(56,189,248,0.35)]"
-              referrerPolicy="no-referrer"
             />
           </div>
-        ) : activeConfig.mode === 'millonario' ? (
-          <div
+        ) : (
+          <div 
             onClick={() => !isDisplayView && setIsModalOpen(true)}
-            className={`w-full h-full rounded-full border-4 border-slate-300 shadow-[0_0_25px_rgba(59,130,246,0.7)] bg-gradient-to-b from-[#180d33] via-[#090b24] to-[#0d163a] flex items-center justify-center p-0.5 relative ${
+            className={`w-full h-full flex items-center justify-center p-1 relative ${
               isDisplayView ? 'cursor-default' : 'cursor-pointer'
             }`}
           >
-            <svg className="w-full h-full" viewBox="0 0 200 200">
-              <defs>
-                <linearGradient id="millGold" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#fffbeb" />
-                  <stop offset="35%" stopColor="#fef08a" />
-                  <stop offset="70%" stopColor="#eab308" />
-                  <stop offset="100%" stopColor="#a16207" />
-                </linearGradient>
+            <img
+              src="/Quien_Logo.png"
+              alt="Quién Quiere Ganar"
+              className="w-full h-full object-contain filter drop-shadow-[0_0_20px_rgba(6,182,212,0.65)] select-none pointer-events-none"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = '/header_logo.png';
+              }}
+            />
+          </div>
+        )}
+      </div>
 
-                <linearGradient id="millChrome" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#94a3b8" />
-                  <stop offset="25%" stopColor="#f8fafc" />
-                  <stop offset="50%" stopColor="#cbd5e1" />
-                  <stop offset="75%" stopColor="#ffffff" />
-                  <stop offset="100%" stopColor="#64748b" />
-                </linearGradient>
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-cyan-500/60 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-[0_0_50px_rgba(6,182,212,0.4)] text-white relative">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
 
-                <radialGradient id="millCoreGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.45" />
-                  <stop offset="40%" stopColor="#1e1b4b" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="#030712" stopOpacity="1" />
-                </radialGradient>
+            <div className="flex items-center gap-2 mb-4">
+              <Sparkles className="w-5 h-5 text-amber-400" />
+              <h3 className="text-base sm:text-lg font-black font-['Orbitron',sans-serif] text-cyan-300">
+                Seleccionar Logotipo
+              </h3>
+            </div>
 
-                <path id="millTopPath" d="M 34,76 A 68,68 0 0,1 166,76" />
-                <path id="millBottomPath" d="M 38,124 A 68,68 0 0,0 162,124" />
-              </defs>
+            {successToast && (
+              <div className="mb-4 p-2.5 bg-emerald-950/90 border border-emerald-400/80 rounded-xl text-xs font-bold text-emerald-200 flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{successToast}</span>
+              </div>
+            )}
 
-              <circle cx="100" cy="100" r="96" fill="url(#millCoreGlow)" />
-              <circle cx="100" cy="100" r="94" fill="none" stroke="#0ea5e9" strokeWidth="1" opacity="0.6" />
-              <circle cx="100" cy="100" r="91" fill="none" stroke="url(#millChrome)" strokeWidth="2.5" />
-              <circle cx="100" cy="100" r="76" fill="none" stroke="#38bdf8" strokeWidth="1.2" strokeDasharray="3 2" opacity="0.7" />
+            <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl mb-5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 overflow-hidden">
+                  {isOptimizing ? (
+                    <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
+                  ) : previewCustom ? (
+                    <img src={previewCustom} alt="Vista previa" className="w-full h-full object-contain" />
+                  ) : (
+                    <Camera className="w-5 h-5 text-slate-400" />
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-200">
+                    {previewCustom ? 'Imagen personalizada guardada' : 'Subir logotipo oficial'}
+                  </div>
+                  <div className="text-[10px] text-slate-400">PNG, JPG o SVG</div>
+                </div>
+              </div>
 
-              {[...Array(16)].map((_, idx) => {
-                const angle = (idx * 360) / 16;
-                const rad = (angle * Math.PI) / 180;
-                const x = 100 + 86 * Math.cos(rad);
-                const y = 100 + 86 * Math.sin(rad);
-                return (
-                  <circle
-                    key={idx}
-                    cx={x}
-                    cy={y}
-                    r="1.8"
-                    fill="#e2e8f0"
-                    stroke="#0f172a"
-                    strokeWidth="0.6"
-                  />
-                );
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  disabled={isOptimizing}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-bold text-xs cursor-pointer transition shadow"
+                >
+                  {isOptimizing ? 'Procesando...' : previewCustom ? 'Cambiar Imagen' : 'Subir Imagen'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleResetDefaults}
+                className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer transition"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Restaurar oficial</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black text-xs font-['Orbitron',sans-serif] cursor-pointer shadow-md"
+              >
+                Listo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
