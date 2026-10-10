@@ -832,21 +832,22 @@ export default function App() {
       setTimeout(() => {
         audioManager.startTensionForLevel(nextLvl);
       }, 800);
-      syncBroadcast(
-        {
-          ...getCurrentSnapshot(),
-          activeModal: null,
-          currentLevel: nextLvl,
-          selectedOption: null,
-          selectedAnswer: null,
-          revealedState: 'idle',
-          answerStatus: 'idle',
-          hiddenOptions: [],
-          lastUpdated: Date.now(),
-        },
-        'NEXT_QUESTION',
-        { level: nextLvl }
-      );
+
+      const nextSnapshot: UnifiedGameState = {
+        ...getCurrentSnapshot(),
+        activeModal: null,
+        currentLevel: nextLvl,
+        currentQuestionIndex: nextLvl - 1,
+        selectedOption: null,
+        selectedAnswer: null,
+        revealedState: 'idle',
+        answerStatus: 'idle',
+        hiddenOptions: [],
+        lastUpdated: Date.now(),
+      };
+
+      syncBroadcast(nextSnapshot, 'NEXT_QUESTION', { level: nextLvl });
+      pushGameState(nextSnapshot); // Forzamos envío directo a Supabase
     }
   };
 
