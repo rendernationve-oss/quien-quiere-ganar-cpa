@@ -4,55 +4,61 @@ const SUPABASE_URL = 'https://ncywejhaprkriumfzfyt.supabase.co';
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jeXdlamhhcHJrcml1bWZ6Znl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2Mzg3NDUsImV4cCI6MjEwNzIxNDc0NX0.qIo6ZfeRgWJkbQbgPZfAzvp_FETd0g33kgtkU4U2PYk';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-});
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const GAME_CHANNEL_NAME = 'cpa_live_game_room';
+const GAME_CHANNEL_NAME = 'room_puerto_azul_live';
 
-// Canal único público para enviar y recibir sin requerir login ni políticas de tablas
+let channelStatus = 'CONNECTING';
+let lastOutgoingState: any = null;
+const listeners: Array<(state: any) => void> = [];
+
 export const gameChannel = supabase.channel(GAME_CHANNEL_NAME, {
   config: {
-    broadcast: { ack: false, self: true },
-    private: false,
+    broadcast: { ack: true, self: true },
   },
 });
 
-gameChannel.subscribe((status) => {
-  console.log('[Supabase Realtime Status]:', status);
-});
-
-/**
- * Emite el estado desde la PC Máster a cualquier pantalla
- */
-export const pushGameState = (state: any) => {
-  if (!state) return;
-  gameChannel
-    .send({
-      type: 'broadcast',
-      event: 'GAME_SYNC',
-      payload: state,
-    })
-    .catch((err) => {
-      console.warn('[Supabase Broadcast Error]:', err);
-    });
-};
-
-/**
- * Escucha los cambios en tiempo real en la Pantalla Pública (Tablet)
- */
-export const subscribeToGameState = (onStateChange: (state: any) => void) => {
-  gameChannel.on('broadcast', { event: 'GAME_SYNC' }, (message) => {
-    if (message && message.payload) {
-      onStateChange(message.payload);
+gameChannel
+  .on('broadcast', { event: 'GAME_SYNC' }, (payload: any) => {
+    console.log('[Supabase Realtime] Mensaje recibido:', payload);
+    if (payload && payload.payload) {
+      listeners.forEach((fn) => fn(payload.payload));
+    }
+  })
+  .subscribe((status) => {
+    channelStatus = status;
+    console.log('[Supabase Realtime Estado]:', status);
+    if (status === 'SUBSCRIBED' && lastOutgoingState) {
+      pushGameState(lastOutgoingState);
     }
   });
 
+export const pushGameState = async (state: any) => {
+  if (!state) return;
+  lastOutgoingState = state;
+
+  if (channelStatus !== 'SUBSCRIBED') {
+    console.warn('[Supabase Realtime] Esperando conexión para enviar...');
+    return;
+  }
+
+  try {
+    const res = await gameChannel.send({
+      type: 'broadcast',
+      event: 'GAME_SYNC',
+      payload: state,
+    });
+    console.log('[Supabase Realtime] Enviado exitosamente:', res);
+  } catch (err) {
+    console.error('[Supabase Realtime Error al enviar]:', err);
+  }
+};
+
+export const subscribeToGameState = (onStateChange: (state: any) => void) => {
+  listeners.push(onStateChange);
+
   return () => {
-    // Mantener la conexión abierta
+    const idx = listeners.indexOf(onStateChange);
+    if (idx > -1) listeners.splice(idx, 1);
   };
 };
