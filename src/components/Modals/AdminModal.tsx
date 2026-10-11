@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, RotateCcw, Download, Upload, CheckCircle, FileCode, Play, Plus, User, Trash2, Camera, Image as ImageIcon, Sparkles, Check, ShieldCheck, Loader2 } from 'lucide-react';
+import { X, Save, RotateCcw, Download, Upload, CheckCircle, FileCode, Play, Plus, User, Trash2, Camera, Image as ImageIcon, Sparkles, Check, ShieldCheck, Loader2, Link2, FileText } from 'lucide-react';
 import { ParticipantSession, Question, OptionLetter } from '../../types/game';
 import { generateSingleFileHtml } from '../../utils/singleFileHtmlGenerator';
+import { parseQuestionsTxt } from '../../utils/txtQuestionParser';
 import {
   LogoMode,
   LogoConfig,
@@ -53,6 +54,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [correctAnswer, setCorrectAnswer] = useState<OptionLetter>('A');
   const [explanation, setExplanation] = useState<string>('');
   const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  // Google Docs Link import state
+  const [googleDocsUrl, setGoogleDocsUrl] = useState<string>('');
+  const [isLoadingGoogleDoc, setIsLoadingGoogleDoc] = useState<boolean>(false);
 
   // Logo configuration state
   const [internalLogoConfig, setInternalLogoConfig] = useState<LogoConfig>(() =>
@@ -154,7 +159,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       onSaveParticipantName(selectedPartIndex, participantName.trim());
     }
 
-    setSaveToast(`¡Pregunta del Nivel ${selectedLevel} para "${participantName}" guardada con éxito!`);
+    setSaveToast(`¡Pregunta del Nivel ${selectedLevel} para "${participantName}" guardada en Supabase y Local!`);
     setTimeout(() => setSaveToast(null), 3000);
   };
 
@@ -189,34 +194,118 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * Procesa el texto crudo con la nomenclatura de bloquepreguntas1.txt (P1, P2, 1-..., A..., R...)
+   */
+  const processTxtRawContent = (rawContent: string, sourceLabel: string) => {
+    const cleanedContent = rawContent.replace(/^\uFEFF/, ''); // Elimina BOM si proviene de Google Docs
+    const parsed = parseQuestionsTxt(cleanedContent, participants);
+
+    if (parsed.length === 0) {
+      alert(`No se reconocieron bloques de preguntas válidos (P1, P2...) desde ${sourceLabel}. Revisa que tenga la estructura de bloquepreguntas1.txt.`);
+      return false;
+    }
+
+    const mergedParticipants = participants.map((p) => {
+      const found = parsed.find((item) => item.participantNumber === p.participantNumber);
+      return found ? found : p;
+    });
+
+    parsed.forEach((p) => {
+      if (!mergedParticipants.some((m) => m.participantNumber === p.participantNumber)) {
+        mergedParticipants.push(p);
+      }
+    });
+
+    onImportTournament(mergedParticipants);
+    setSaveToast(`¡Carga exitosa desde ${sourceLabel}! Se actualizaron y guardaron en Supabase ${parsed.length} participantes.`);
+    setTimeout(() => setSaveToast(null), 4000);
+    return true;
+  };
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = (event) => {
-      try {
-        const parsed = JSON.parse(event.target?.result as string);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          onImportTournament(parsed);
-          setSaveToast('¡Sesiones del torneo importadas correctamente!');
-          setTimeout(() => setSaveToast(null), 3000);
-        } else if (parsed && parsed.tournament && Array.isArray(parsed.tournament)) {
-          onImportTournament(parsed.tournament);
-          if (parsed.logoConfig) {
-            setInternalLogoConfig(parsed.logoConfig);
-            persistLogoConfig(parsed.logoConfig);
-            onUpdateLogo?.(parsed.logoConfig);
-          }
-          setSaveToast('¡Sesiones y logotipo importados y fijados con éxito!');
-          setTimeout(() => setSaveToast(null), 3000);
-        } else {
-          alert('El archivo JSON no tiene un formato válido.');
+      const rawContent = event.target?.result as string;
+
+      // Si es un archivo .txt o texto con estructura P1, P2...
+      if (file.name.endsWith('.txt') || rawContent.includes('P1')) {
+        try {
+          processTxtRawContent(rawContent, `archivo ${file.name}`);
+        } catch (err) {
+          console.error(err);
+          alert('Hubo un error al procesar el archivo .txt.');
         }
-      } catch {
-        alert('Error al leer el archivo JSON.');
+      } else {
+        // Intenta procesar como archivo .json
+        try {
+          const parsed = JSON.parse(rawContent);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            onImportTournament(parsed);
+            setSaveToast('¡Sesiones del torneo importadas y guardadas en Supabase desde JSON!');
+            setTimeout(() => setSaveToast(null), 3000);
+          } else if (parsed && parsed.tournament && Array.isArray(parsed.tournament)) {
+            onImportTournament(parsed.tournament);
+            if (parsed.logoConfig) {
+              setInternalLogoConfig(parsed.logoConfig);
+              persistLogoConfig(parsed.logoConfig);
+              onUpdateLogo?.(parsed.logoConfig);
+            }
+            setSaveToast('¡Sesiones y logotipo importados y guardados en Supabase con éxito!');
+            setTimeout(() => setSaveToast(null), 3000);
+          } else {
+            alert('El archivo no tiene un formato válido (esperado JSON o TXT).');
+          }
+        } catch {
+          alert('Error al leer el archivo. Asegúrate de que sea un .txt válido o .json estructurado.');
+        }
       }
     };
+
     reader.readAsText(file);
+    e.target.value = ''; // Permite recargar el mismo archivo si se desea
+  };
+
+  /**
+   * Importa preguntas directamente desde un enlace de Google Docs con la nomenclatura de bloquepreguntas1.txt
+   */
+  const handleImportFromGoogleDocs = async () => {
+    const trimmedUrl = googleDocsUrl.trim();
+    if (!trimmedUrl) {
+      alert('Por favor pega el enlace del documento de Google Docs.');
+      return;
+    }
+
+    setIsLoadingGoogleDoc(true);
+    try {
+      let fetchUrl = trimmedUrl;
+      const docIdMatch = trimmedUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+
+      if (docIdMatch && docIdMatch[1]) {
+        fetchUrl = `https://docs.google.com/document/d/${docIdMatch[1]}/export?format=txt`;
+      }
+
+      const response = await fetch(fetchUrl);
+      if (!response.ok) {
+        throw new Error(`Error HTTP ${response.status}`);
+      }
+
+      const rawText = await response.text();
+      const ok = processTxtRawContent(rawText, 'Google Docs');
+      if (ok) {
+        setGoogleDocsUrl('');
+      }
+    } catch (err) {
+      console.error('Error al importar desde Google Docs:', err);
+      alert(
+        'No se pudo descargar el documento de Google Docs. Asegúrate de que el documento tenga acceso público ("Cualquier persona con el enlace puede ver") y sigue la estructura de bloquepreguntas1.txt.'
+      );
+    } finally {
+      setIsLoadingGoogleDoc(false);
+    }
   };
 
   return (
@@ -234,7 +323,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 Panel Administrativo Multijugador
               </h2>
               <p className="text-[11px] text-slate-400">
-                Configuración de 5+ sesiones de socios con 15 preguntas independientes cada uno
+                Configuración sincronizada con Supabase · 5+ sesiones con 15 preguntas cada una
               </p>
             </div>
           </div>
@@ -258,6 +347,60 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         {/* Scrollable Form Body */}
         <div className="overflow-y-auto pr-1 sm:pr-2 space-y-4 my-3 text-left">
           
+          {/* Carga Masiva: Archivo .TXT o Enlace de Google Docs */}
+          <div className="bg-[#040b24] p-3.5 rounded-2xl border border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.15)] space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-cyan-400 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-cyan-300 font-['Orbitron',sans-serif]">
+                    Carga Masiva de Preguntas (.TXT / Google Docs)
+                  </h4>
+                  <p className="text-[10px] text-slate-400">
+                    Sube un archivo <code className="text-amber-300">.txt</code> o pega un enlace de Google Docs con la nomenclatura <code className="text-cyan-300">P1, 1-Pregunta, A/B/C/D, R Letra</code>
+                  </p>
+                </div>
+              </div>
+
+              <label className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0 shadow-[0_0_12px_rgba(6,182,212,0.4)]">
+                <Upload className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Subir Archivo .TXT</span>
+                <input
+                  type="file"
+                  accept=".txt,.json,text/plain,application/json"
+                  onChange={handleImportFile}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1.5 border-t border-cyan-500/20">
+              <div className="relative flex-1">
+                <Link2 className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="url"
+                  value={googleDocsUrl}
+                  onChange={(e) => setGoogleDocsUrl(e.target.value)}
+                  placeholder="Pega aquí el enlace compartido de Google Docs (https://docs.google.com/document/d/...)"
+                  className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-400 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={isLoadingGoogleDoc}
+                onClick={handleImportFromGoogleDocs}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0 shadow"
+              >
+                {isLoadingGoogleDoc ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                <span>{isLoadingGoogleDoc ? 'Cargando...' : 'Cargar desde Google Docs'}</span>
+              </button>
+            </div>
+          </div>
+
           {/* Logo Customization Banner & Controls */}
           <div className="bg-[#04081c] p-3 rounded-2xl border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.15)]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -624,7 +767,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               onClick={() => {
                 if (window.confirm('¿Restaurar las 75 preguntas oficiales para las 5 sesiones de participantes?')) {
                   onRestoreDefaults();
-                  setSaveToast('¡75 preguntas oficiales para 5 participantes restauradas!');
+                  setSaveToast('¡75 preguntas oficiales restauradas y guardadas en Supabase!');
                   setTimeout(() => setSaveToast(null), 3000);
                 }
               }}
@@ -655,12 +798,18 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               <Download className="w-4 h-4" />
             </button>
 
+            {/* Botón Upload que acepta tanto .txt como .json */}
             <label
-              title="Importar torneo desde JSON"
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
+              title="Importar preguntas (.txt o .json)"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs transition cursor-pointer border border-transparent hover:border-cyan-400/40"
             >
               <Upload className="w-4 h-4" />
-              <input type="file" accept=".json" onChange={handleImportJson} className="hidden" />
+              <input
+                type="file"
+                accept=".txt,.json,text/plain,application/json"
+                onChange={handleImportFile}
+                className="hidden"
+              />
             </label>
           </div>
         </div>
