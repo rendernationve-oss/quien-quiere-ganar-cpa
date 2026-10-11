@@ -46,7 +46,12 @@ import {
   LEGACY_STORAGE_KEY,
   GAME_SYNC_CHANNEL_KEY,
 } from './utils/broadcastSync';
-import { subscribeToGameState, pushGameState } from './utils/supabase';
+import {
+  subscribeToGameState,
+  pushGameState,
+  saveTournamentToSupabase,
+  fetchTournamentFromSupabase,
+} from './utils/supabase';
 import { SplashScreen } from './components/SplashScreen';
 import { ClubLogo } from './components/ClubLogo';
 import { ShowLogo } from './components/ShowLogo';
@@ -194,6 +199,22 @@ export default function App() {
     return INITIAL_PARTICIPANTS;
   });
 
+  // Cargar preguntas y participantes almacenados en la base de datos de Supabase al iniciar
+  useEffect(() => {
+    let isMounted = true;
+    fetchTournamentFromSupabase().then((remoteParticipants) => {
+      if (isMounted && remoteParticipants && Array.isArray(remoteParticipants) && remoteParticipants.length > 0) {
+        setParticipants(remoteParticipants);
+        try {
+          localStorage.setItem(TOURNAMENT_STORAGE_KEY, JSON.stringify(remoteParticipants));
+        } catch {}
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const [currentParticipantIndex, setCurrentParticipantIndex] = useState<number>(
     () => initialSyncState?.currentParticipantIndex ?? 0
   );
@@ -338,8 +359,8 @@ export default function App() {
       finalLevel: number,
       prize: string
     ) => {
-      setParticipants((prev) =>
-        prev.map((p, idx) =>
+      setParticipants((prev) => {
+        const updated = prev.map((p, idx) =>
           idx === currentParticipantIndex
             ? {
                 ...p,
@@ -350,8 +371,10 @@ export default function App() {
                 lifelines,
               }
             : p
-        )
-      );
+        );
+        saveTournamentToSupabase(updated);
+        return updated;
+      });
     },
     [currentParticipantIndex, lifelines]
   );
@@ -410,7 +433,7 @@ export default function App() {
     soundMuted,
   ]);
 
-  // Transmisor universal instantáneo: Direct BroadcastChannel + LocalStorage + Firebase RTDB
+  // Transmisor universal instantáneo: Direct BroadcastChannel + LocalStorage + Supabase Realtime
   const syncBroadcast = useCallback((snapshot: UnifiedGameState, action?: string, payload?: any) => {
     const payloadToSend = {
       ...snapshot,
@@ -431,7 +454,7 @@ export default function App() {
     // 2. Modulo broadcastSync interno
     broadcastGameState(payloadToSend, action, payload);
 
-    // 3. Firebase RTDB (respaldo remoto)
+    // 3. Supabase Realtime (sincronización remota)
     pushGameState(payloadToSend);
   }, []);
 
@@ -475,9 +498,6 @@ export default function App() {
     (s: any) => {
       if (!s) return;
       const incomingTs = typeof s.lastUpdated === 'number' ? s.lastUpdated : (s.timestamp || 0);
-      if (incomingTs && incomingTs < lastAppliedTimestampRef.current && !s.actionType) {
-        return;
-      }
       if (incomingTs) {
         lastAppliedTimestampRef.current = incomingTs;
       }
@@ -539,15 +559,10 @@ export default function App() {
         s.actionType === 'NEXT_QUESTION' ||
         s.actionType === 'NEXT_PARTICIPANT' ||
         s.actionType === 'RESTART_PARTICIPANT' ||
-        !s.activeModal
+        s.activeModal === null ||
+        s.activeModal === undefined
       ) {
         setActiveModal(null);
-      } else if (s.activeModal) {
-        if (isDisplayView && (s.activeModal === 'admin' || s.activeModal === 'tournament')) {
-          setActiveModal(null);
-        } else {
-          setActiveModal(s.activeModal as any);
-        }
       } else if (s.activeModal) {
         if (isDisplayView && (s.activeModal === 'admin' || s.activeModal === 'tournament')) {
           setActiveModal(null);
@@ -647,9 +662,9 @@ export default function App() {
   useEffect(() => {
     if (!isDisplayView) return;
 
-    const unsubscribeFirebase = subscribeToGameState((firebaseState) => {
-      if (firebaseState) {
-        applyIncomingState(firebaseState);
+    const unsubscribeSupabase = subscribeToGameState((remoteState) => {
+      if (remoteState) {
+        applyIncomingState(remoteState);
       }
     });
 
@@ -718,7 +733,7 @@ export default function App() {
     }, 100);
 
     return () => {
-      unsubscribeFirebase();
+      unsubscribeSupabase();
       window.removeEventListener('message', handleWindowMessage);
       unsubscribeBroadcast();
       window.removeEventListener('storage', handleStorageChange);
@@ -837,22 +852,21 @@ export default function App() {
       setTimeout(() => {
         audioManager.startTensionForLevel(nextLvl);
       }, 800);
-
-      const nextSnapshot: UnifiedGameState = {
-        ...getCurrentSnapshot(),
-        activeModal: null,
-        currentLevel: nextLvl,
-        currentQuestionIndex: nextLvl - 1,
-        selectedOption: null,
-        selectedAnswer: null,
-        revealedState: 'idle',
-        answerStatus: 'idle',
-        hiddenOptions: [],
-        lastUpdated: Date.now(),
-      };
-
-      syncBroadcast(nextSnapshot, 'NEXT_QUESTION', { level: nextLvl });
-      pushGameState(nextSnapshot); // Forzamos envío directo a Supabase
+      syncBroadcast(
+        {
+          ...getCurrentSnapshot(),
+          activeModal: null,
+          currentLevel: nextLvl,
+          selectedOption: null,
+          selectedAnswer: null,
+          revealedState: 'idle',
+          answerStatus: 'idle',
+          hiddenOptions: [],
+          lastUpdated: Date.now(),
+        },
+        'NEXT_QUESTION',
+        { level: nextLvl }
+      );
     }
   };
 
@@ -1078,6 +1092,7 @@ export default function App() {
       const updated = prev.map((p, idx) => (idx === index ? { ...p, name: newName } : p));
       gameBroadcast.send('UPDATE_PARTICIPANTS', updated);
       pushGameState({ participants: updated, lastUpdated: Date.now() });
+      saveTournamentToSupabase(updated);
       return updated;
     });
   };
@@ -1096,6 +1111,7 @@ export default function App() {
       );
       gameBroadcast.send('UPDATE_PARTICIPANTS', updated);
       pushGameState({ participants: updated, lastUpdated: Date.now() });
+      saveTournamentToSupabase(updated);
       return updated;
     });
   };
@@ -1117,6 +1133,7 @@ export default function App() {
       const updated = [...prev, newSession];
       gameBroadcast.send('UPDATE_PARTICIPANTS', updated);
       pushGameState({ participants: updated, lastUpdated: Date.now() });
+      saveTournamentToSupabase(updated);
       return updated;
     });
   };
@@ -1130,6 +1147,7 @@ export default function App() {
       const updated = prev.filter((_, idx) => idx !== index);
       gameBroadcast.send('UPDATE_PARTICIPANTS', updated);
       pushGameState({ participants: updated, lastUpdated: Date.now() });
+      saveTournamentToSupabase(updated);
       return updated;
     });
     if (currentParticipantIndex >= participants.length - 1) {
@@ -1146,6 +1164,7 @@ export default function App() {
     } catch {}
     gameBroadcast.send('UPDATE_PARTICIPANTS', INITIAL_PARTICIPANTS);
     pushGameState({ participants: INITIAL_PARTICIPANTS, currentParticipantIndex: 0, currentLevel: 1, lastUpdated: Date.now() });
+    saveTournamentToSupabase(INITIAL_PARTICIPANTS);
   };
 
   const handleImportTournament = (imported: ParticipantSession[]) => {
@@ -1154,6 +1173,8 @@ export default function App() {
     setCurrentLevel(1);
     setShowSplash(true);
     setIsInitialSplash(true);
+
+    saveTournamentToSupabase(imported);
 
     const snapshot: UnifiedGameState = {
       ...getCurrentSnapshot(),
