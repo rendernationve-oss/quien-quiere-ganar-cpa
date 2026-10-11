@@ -1,18 +1,8 @@
-Mira lo que está haciendo tu navegador al pegar en GitHub: tiene un límite de ~8.000 caracteres al pegar y corta el resto (EOF = End Of File, se cortó justo en setGoogleDocsUrl(e.target).
-
-Para que no pases por ese límite nunca más, te entrego src/components/Modals/AdminModal.tsx en solo ~120 líneas (~4.500 caracteres) — menos de la mitad del límite de tu navegador, por lo que es 100% imposible que se corte.
-
-Haz esto en src/components/Modals/AdminModal.tsx:
-Borra todo (Ctrl + A → Supr).
-
-Pega este bloque corto:
-
-TypeScript
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, RotateCcw, Download, Upload, CheckCircle, FileCode, Play, Plus, User, Trash2, Camera, Sparkles, Loader2 } from 'lucide-react';
+import { X, Save, RotateCcw, Download, Upload, CheckCircle, FileCode, Play, Plus, User, Trash2, Camera, Loader2 } from 'lucide-react';
 import { ParticipantSession, Question, OptionLetter } from '../../types/game';
 import { generateSingleFileHtml } from '../../utils/singleFileHtmlGenerator';
-import { LogoConfig, getInitialLogoConfig, persistLogoConfig, resetLogoConfig, optimizeImageFile } from '../../utils/logoStorage';
+import { LogoConfig, getInitialLogoConfig, persistLogoConfig, optimizeImageFile } from '../../utils/logoStorage';
 
 function parseQuestionsTxt(raw: string, existing: ParticipantSession[]): ParticipantSession[] {
   const lines = raw.replace(/^\uFEFF/, '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -167,42 +157,4 @@ export const AdminModal: React.FC<any> = ({
               ))}
             </div>
             <div className="flex gap-2 pt-1">
-              <input type="text" value={pName} onChange={e => setPName(e.target.value)} onBlur={() => pName.trim() && onSaveParticipantName(pIdx, pName.trim())} className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1 text-xs text-white" />
-              <button type="button" onClick={() => { onJumpToParticipantAndLevel(pIdx, lvl); onClose(); }} className="px-3 py-1 rounded-lg bg-cyan-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"><Play className="w-3 h-3" /> Jugar</button>
-              {participants.length > 5 && onDeleteParticipant && (
-                <button type="button" onClick={() => { onDeleteParticipant(pIdx); setPIdx(0); }} className="p-1.5 rounded-lg bg-rose-950 text-rose-300 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 bg-[#060f26] p-2.5 rounded-xl border border-cyan-500/20">
-            <span className="text-xs font-bold text-cyan-300">Nivel:</span>
-            <select value={lvl} onChange={e => setLvl(Number(e.target.value))} className="bg-slate-900 border border-cyan-500/40 rounded-lg px-3 py-1 text-xs font-bold text-amber-300 flex-1">
-              {Array.from({ length: 15 }, (_, i) => i + 1).map(n => <option key={n} value={n}>Pregunta Nivel {n}</option>)}
-            </select>
-          </div>
-
-          <textarea rows={2} value={qTxt} onChange={e => setQTxt(e.target.value)} placeholder="Enunciado de la pregunta..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-white" />
-
-          <div className="space-y-1.5">
-            {(['A', 'B', 'C', 'D'] as OptionLetter[]).map(l => (
-              <div key={l} className={corr === l ? 'flex items-center gap-2 p-2 rounded-xl border bg-emerald-950/40 border-emerald-400' : 'flex items-center gap-2 p-2 rounded-xl border bg-slate-950 border-slate-800'}>
-                <input type="radio" name="corr" checked={corr === l} onChange={() => setCorr(l)} className="w-4 h-4 accent-emerald-500 cursor-pointer" />
-                <span className="w-6 h-6 rounded flex items-center justify-center font-bold text-xs bg-slate-800 text-amber-400">{l}</span>
-                <input type="text" value={opts[l]} onChange={e => setOpts({ ...opts, [l]: e.target.value })} className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1 text-sm text-white" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="pt-3 border-t border-cyan-500/30 flex items-center justify-between gap-2">
-          <div className="flex gap-2">
-            <button type="button" onClick={() => { onSaveQuestion(pIdx, { id: lvl, question: qTxt, options: opts, correctAnswer: corr }); notify('¡Guardado en Supabase!'); }} className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"><Save className="w-4 h-4" /> Guardar Pregunta</button>
-            <button type="button" onClick={() => window.confirm('¿Restaurar 75 preguntas?') && onRestoreDefaults()} className="px-3 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs flex items-center gap-1 cursor-pointer"><RotateCcw className="w-3.5 h-3.5" /> Restaurar</button>
-          </div>
-          <button type="button" onClick={() => { const b = new Blob([generateSingleFileHtml(participants, activeLogo)], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'puerto-azul-torneo.html'; a.click(); }} className="px-3 py-2 rounded-xl bg-amber-500 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer"><Download className="w-4 h-4" /> HTML</button>
-        </div>
-      </div>
-    </div>
-  );
-};
+              <input type="text" value={pName} onChange={e => setPName(
