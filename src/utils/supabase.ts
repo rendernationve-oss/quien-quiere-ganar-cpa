@@ -13,6 +13,8 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 const GAME_CHANNEL_NAME = 'cpa_live_game_room';
+const TOURNAMENT_TABLE = 'cpa_tournament_store';
+const TOURNAMENT_ROW_ID = 'active_tournament';
 
 // Canal único global inicializado inmediatamente
 export const gameChannel = supabase.channel(GAME_CHANNEL_NAME, {
@@ -61,4 +63,54 @@ export const subscribeToGameState = (onStateChange: (state: any) => void) => {
   return () => {
     // Mantener la conexión activa durante toda la partida
   };
+};
+
+/**
+ * Guarda de forma persistente los participantes y sus preguntas en la base de datos de Supabase
+ */
+export const saveTournamentToSupabase = async (participants: any[]): Promise<boolean> => {
+  if (!participants || !Array.isArray(participants)) return false;
+  try {
+    const { error } = await supabase
+      .from(TOURNAMENT_TABLE)
+      .upsert(
+        {
+          id: TOURNAMENT_ROW_ID,
+          participants,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      );
+
+    if (error) {
+      console.warn('[Supabase DB Save Warning]:', error.message);
+      return false;
+    }
+    console.log('[Supabase DB]: Preguntas y participantes guardados en la nube.');
+    return true;
+  } catch (err) {
+    console.warn('[Supabase DB Save Error]:', err);
+    return false;
+  }
+};
+
+/**
+ * Obtiene los participantes y preguntas guardados en la base de datos de Supabase al iniciar
+ */
+export const fetchTournamentFromSupabase = async (): Promise<any[] | null> => {
+  try {
+    const { data, error } = await supabase
+      .from(TOURNAMENT_TABLE)
+      .select('participants')
+      .eq('id', TOURNAMENT_ROW_ID)
+      .single();
+
+    if (error || !data || !Array.isArray(data.participants)) {
+      return null;
+    }
+    return data.participants;
+  } catch (err) {
+    console.warn('[Supabase DB Fetch Error]:', err);
+    return null;
+  }
 };
