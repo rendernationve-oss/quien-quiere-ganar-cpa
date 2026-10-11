@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, RotateCcw, Download, Upload, CheckCircle, FileCode, Play, Plus, User, Trash2, Camera, Image as ImageIcon, Sparkles, Check, ShieldCheck, Loader2, Link2, FileText } from 'lucide-react';
+import { X, Save, RotateCcw, Download, Upload, CheckCircle, FileCode, Play, Plus, User, Trash2, Camera, Image as ImageIcon, Sparkles, Check, ShieldCheck, Loader2 } from 'lucide-react';
 import { ParticipantSession, Question, OptionLetter } from '../../types/game';
 import { generateSingleFileHtml } from '../../utils/singleFileHtmlGenerator';
-import { parseQuestionsTxt } from '../../utils/txtQuestionParser';
 import {
   LogoMode,
   LogoConfig,
@@ -11,6 +10,116 @@ import {
   resetLogoConfig,
   optimizeImageFile,
 } from '../../utils/logoStorage';
+
+/**
+ * Analizador integrado para archivos .txt y documentos de Google Docs
+ * Formato soportado: bloquepreguntas1.txt (P1, P2..., 1-Pregunta, A/B/C/D, R Letra)
+ */
+function parseQuestionsTxt(rawText: string, existingParticipants: ParticipantSession[]): ParticipantSession[] {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  const parsedParticipants: ParticipantSession[] = [];
+  let currentPartNumber: number | null = null;
+  let currentQuestions: Question[] = [];
+
+  let currentQId: number | null = null;
+  let currentQText = '';
+  let currentOptions: { A: string; B: string; C: string; D: string } = { A: '', B: '', C: '', D: '' };
+  let currentCorrect: OptionLetter = 'A';
+
+  const flushQuestion = () => {
+    if (currentQId !== null && currentQText) {
+      currentQuestions.push({
+        id: currentQId,
+        question: currentQText,
+        options: { ...currentOptions },
+        correctAnswer: currentCorrect,
+      });
+    }
+    currentQId = null;
+    currentQText = '';
+    currentOptions = { A: '', B: '', C: '', D: '' };
+    currentCorrect = 'A';
+  };
+
+  const flushParticipant = () => {
+    flushQuestion();
+    if (currentPartNumber !== null && currentQuestions.length > 0) {
+      const existing = existingParticipants.find((p) => p.participantNumber === currentPartNumber);
+      const mergedQuestions: Question[] = [];
+
+      for (let lvl = 1; lvl <= 15; lvl++) {
+        const foundNew = currentQuestions.find((q) => q.id === lvl);
+        const foundOld = existing?.questions.find((q) => q.id === lvl);
+        if (foundNew) {
+          mergedQuestions.push(foundNew);
+        } else if (foundOld) {
+          mergedQuestions.push(foundOld);
+        } else {
+          mergedQuestions.push({
+            id: lvl,
+            question: `Pregunta nivel ${lvl}`,
+            options: { A: 'Opción A', B: 'Opción B', C: 'Opción C', D: 'Opción D' },
+            correctAnswer: 'A',
+          });
+        }
+      }
+
+      parsedParticipants.push({
+        id: existing?.id || `participant-${currentPartNumber}-${Date.now()}`,
+        participantNumber: currentPartNumber,
+        name: existing?.name || `Participante ${currentPartNumber} - Socio Puerto Azul`,
+        questions: mergedQuestions,
+        status: 'not_started',
+        currentLevel: 1,
+        highestLevelReached: 0,
+        prizeWon: '0 Pts',
+        lifelines: { fiftyFifty: false, audience: false, phone: false },
+      });
+    }
+    currentQuestions = [];
+  };
+
+  for (const line of lines) {
+    // Detectar encabezado de participante: P1, P2, P3, etc.
+    const partMatch = line.match(/^P(\d+)$/i);
+    if (partMatch) {
+      flushParticipant();
+      currentPartNumber = parseInt(partMatch[1], 10);
+      continue;
+    }
+
+    // Detectar inicio de pregunta: "1-¿En qué..." o "14- ¿Qué..."
+    const qMatch = line.match(/^(\d+)\s*[-.]\s*(.+)$/);
+    if (qMatch) {
+      flushQuestion();
+      currentQId = parseInt(qMatch[1], 10);
+      currentQText = qMatch[2].trim();
+      continue;
+    }
+
+    // Detectar respuesta correcta: "R C" o "R: C"
+    const rMatch = line.match(/^R[:\s]+([ABCD])$/i);
+    if (rMatch) {
+      currentCorrect = rMatch[1].toUpperCase() as OptionLetter;
+      continue;
+    }
+
+    // Detectar opciones A, B, C, D: "A Miranda", "B 1950-1955", etc.
+    const optMatch = line.match(/^([ABCD])[)\s.:-]+(.+)$/);
+    if (optMatch && currentQId !== null) {
+      const letter = optMatch[1].toUpperCase() as OptionLetter;
+      currentOptions[letter] = optMatch[2].trim();
+      continue;
+    }
+  }
+
+  flushParticipant();
+  return parsedParticipants;
+}
 
 interface AdminModalProps {
   participants: ParticipantSession[];
@@ -117,14 +226,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   const currentSession = participants[selectedPartIndex] || participants[0];
 
-  // Sync participant name when selectedPartIndex changes
   useEffect(() => {
     if (currentSession) {
       setParticipantName(currentSession.name);
     }
   }, [selectedPartIndex, currentSession]);
 
-  // Load question fields when selectedPartIndex or selectedLevel changes
   useEffect(() => {
     if (!currentSession) return;
     const q = currentSession.questions.find((item) => item.id === selectedLevel);
@@ -194,11 +301,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  /**
-   * Procesa el texto crudo con la nomenclatura de bloquepreguntas1.txt (P1, P2, 1-..., A..., R...)
-   */
   const processTxtRawContent = (rawContent: string, sourceLabel: string) => {
-    const cleanedContent = rawContent.replace(/^\uFEFF/, ''); // Elimina BOM si proviene de Google Docs
+    const cleanedContent = rawContent.replace(/^\uFEFF/, '');
     const parsed = parseQuestionsTxt(cleanedContent, participants);
 
     if (parsed.length === 0) {
@@ -231,7 +335,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     reader.onload = (event) => {
       const rawContent = event.target?.result as string;
 
-      // Si es un archivo .txt o texto con estructura P1, P2...
       if (file.name.endsWith('.txt') || rawContent.includes('P1')) {
         try {
           processTxtRawContent(rawContent, `archivo ${file.name}`);
@@ -240,7 +343,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           alert('Hubo un error al procesar el archivo .txt.');
         }
       } else {
-        // Intenta procesar como archivo .json
         try {
           const parsed = JSON.parse(rawContent);
           if (Array.isArray(parsed) && parsed.length > 0) {
@@ -266,12 +368,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     };
 
     reader.readAsText(file);
-    e.target.value = ''; // Permite recargar el mismo archivo si se desea
+    e.target.value = '';
   };
 
-  /**
-   * Importa preguntas directamente desde un enlace de Google Docs con la nomenclatura de bloquepreguntas1.txt
-   */
   const handleImportFromGoogleDocs = async () => {
     const trimmedUrl = googleDocsUrl.trim();
     if (!trimmedUrl) {
@@ -301,7 +400,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     } catch (err) {
       console.error('Error al importar desde Google Docs:', err);
       alert(
-        'No se pudo descargar el documento de Google Docs. Asegúrate de que el documento tenga acceso público ("Cualquier persona con el enlace puede ver") y sigue la estructura de bloquepreguntas1.txt.'
+        'No se pudo descargar el documento de Google Docs. Asegúrate de que el documento tenga acceso público ("Cualquier persona con el enlace puede ver") y siga la estructura de bloquepreguntas1.txt.'
       );
     } finally {
       setIsLoadingGoogleDoc(false);
@@ -351,7 +450,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           <div className="bg-[#040b24] p-3.5 rounded-2xl border border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.15)] space-y-2.5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-cyan-400 shrink-0" />
+                <FileCode className="w-4 h-4 text-cyan-400 shrink-0" />
                 <div>
                   <h4 className="text-xs font-black uppercase tracking-wider text-cyan-300 font-['Orbitron',sans-serif]">
                     Carga Masiva de Preguntas (.TXT / Google Docs)
@@ -376,13 +475,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1.5 border-t border-cyan-500/20">
               <div className="relative flex-1">
-                <Link2 className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="url"
                   value={googleDocsUrl}
                   onChange={(e) => setGoogleDocsUrl(e.target.value)}
                   placeholder="Pega aquí el enlace compartido de Google Docs (https://docs.google.com/document/d/...)"
-                  className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-400 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none"
+                  className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-400 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none"
                 />
               </div>
               <button
@@ -488,332 +586,4 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   <button
                     type="button"
                     onClick={() => handleUpdateLogoMode('farito')}
-                    className={`p-2 rounded-xl border text-center transition cursor-pointer ${
-                      activeLogoConfig.mode === 'farito'
-                        ? 'border-amber-400 bg-amber-500/10 text-amber-300 font-bold'
-                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-[11px]">El Farito</div>
-                    <div className="text-[9px] text-sky-400">Escudo Club CPA</div>
-                    {activeLogoConfig.mode === 'farito' && (
-                      <span className="text-[9px] text-amber-400 font-bold block mt-0.5">✓ Fijo Activo</span>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activeLogoConfig.customImageData) {
-                        handleUpdateLogoMode('custom');
-                      } else {
-                        logoFileInputRef.current?.click();
-                      }
-                    }}
-                    className={`p-2 rounded-xl border text-center transition cursor-pointer ${
-                      activeLogoConfig.mode === 'custom'
-                        ? 'border-amber-400 bg-amber-500/10 text-amber-300 font-bold'
-                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-[11px]">Imagen Adjunta</div>
-                    <div className="text-[9px] text-slate-400">Subir de archivo</div>
-                    {activeLogoConfig.mode === 'custom' && (
-                      <span className="text-[9px] text-amber-400 font-bold block mt-0.5">✓ Fijo Activo</span>
-                    )}
-                  </button>
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="button"
-                    onClick={handleResetLogo}
-                    className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer transition"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Restaurar logotipo oficial por defecto</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Standalone HTML Export Banner */}
-          <div className="bg-[#030b20] p-3 rounded-2xl border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.15)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-amber-300 shrink-0">
-                <Download className="w-5 h-5 text-amber-400" />
-              </div>
-              <div>
-                <h4 className="text-xs font-black uppercase tracking-wider text-amber-300 font-['Orbitron',sans-serif]">
-                  Exportar Juego en HTML Autocontenido
-                </h4>
-                <p className="text-[10px] text-slate-400">
-                  Descarga un archivo .html único con todas las preguntas y sesiones listo para abrir en cualquier navegador o proyector sin conexión a internet.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleDownloadStandaloneHtml}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(245,158,11,0.35)] transition cursor-pointer font-['Orbitron',sans-serif] shrink-0"
-            >
-              <Download className="w-4 h-4 stroke-[2.5]" />
-              <span>Exportar HTML</span>
-            </button>
-          </div>
-          
-          {/* Participant Session Selector Tabs */}
-          <div className="bg-[#04081c] p-3 rounded-2xl border border-cyan-500/30">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-black uppercase tracking-wider text-cyan-300 font-['Orbitron',sans-serif] flex items-center gap-1.5">
-                <User className="w-4 h-4 text-amber-400" />
-                <span>Sesión de Participante:</span>
-              </label>
-
-              <button
-                type="button"
-                onClick={onAddParticipant}
-                className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
-              >
-                <Plus className="w-3 h-3" />
-                <span>+ Agregar Participante</span>
-              </button>
-            </div>
-
-            {/* Horizontal Session Tabs */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              {participants.map((p, idx) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setSelectedPartIndex(idx)}
-                  className={`px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
-                    selectedPartIndex === idx
-                      ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-[0_0_12px_rgba(6,182,212,0.6)] font-black'
-                      : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
-                  }`}
-                >
-                  <span className="font-['Orbitron',sans-serif]">#{p.participantNumber}</span>
-                  <span className="truncate max-w-[130px]">{p.name}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Editable Name & Quick Jump */}
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-cyan-500/20">
-              <div>
-                <label className="text-[11px] text-slate-400 font-bold block mb-1">
-                  Nombre del Socio / Participante:
-                </label>
-                <input
-                  type="text"
-                  value={participantName}
-                  onChange={(e) => setParticipantName(e.target.value)}
-                  onBlur={() => {
-                    if (participantName.trim()) {
-                      onSaveParticipantName(selectedPartIndex, participantName.trim());
-                    }
-                  }}
-                  placeholder="Ej: Dr. Fernando Mendoza"
-                  className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-400 rounded-lg px-3 py-1.5 text-xs text-white"
-                />
-              </div>
-
-              <div className="flex items-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onJumpToParticipantAndLevel(selectedPartIndex, selectedLevel);
-                    onClose();
-                  }}
-                  className="flex-1 py-1.5 px-3 rounded-lg bg-cyan-700/80 hover:bg-cyan-600 text-cyan-100 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Jugar con este socio (Nivel {selectedLevel})</span>
-                </button>
-
-                {participants.length > 5 && onDeleteParticipant && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm(`¿Eliminar la sesión del participante #${currentSession.participantNumber}?`)) {
-                        onDeleteParticipant(selectedPartIndex);
-                        setSelectedPartIndex(0);
-                      }
-                    }}
-                    title="Eliminar este participante"
-                    className="p-1.5 rounded-lg bg-rose-950 hover:bg-rose-900 border border-rose-500/40 text-rose-300 cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Level Selector for this participant */}
-          <div className="flex items-center gap-3 bg-[#060f26] p-3 rounded-xl border border-cyan-500/20">
-            <label htmlFor="level-select" className="text-xs font-bold text-cyan-300 uppercase tracking-wider font-['Orbitron',sans-serif] shrink-0">
-              Nivel de la Pregunta:
-            </label>
-            <select
-              id="level-select"
-              value={selectedLevel}
-              onChange={(e) => setSelectedLevel(Number(e.target.value))}
-              className="bg-slate-900 border border-cyan-500/40 rounded-lg px-3 py-1.5 text-xs sm:text-sm font-bold text-amber-300 font-['Orbitron',sans-serif] focus:outline-none focus:border-cyan-300 cursor-pointer flex-1"
-            >
-              {Array.from({ length: 15 }, (_, i) => i + 1).map((lvl) => (
-                <option key={lvl} value={lvl}>
-                  Nivel {lvl} {lvl === 5 ? '★ Seguro 1 (1.000 Pts)' : lvl === 10 ? '★ Seguro 2 (32.000 Pts)' : lvl === 15 ? '👑 Gran Premio (1.000.000 Pts)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Question Statement Input */}
-          <div>
-            <label className="text-xs font-bold text-cyan-300 block mb-1 uppercase tracking-wide">
-              Enunciado de la Pregunta ({currentSession.name} · Nivel {selectedLevel}):
-            </label>
-            <textarea
-              rows={3}
-              value={questionText}
-              onChange={(e) => setQuestionText(e.target.value)}
-              placeholder="Escribe la pregunta para este nivel..."
-              className="w-full bg-slate-950/90 border border-slate-700 focus:border-cyan-400 rounded-xl p-3 text-sm text-white placeholder-slate-500 focus:outline-none shadow-inner leading-relaxed"
-            />
-          </div>
-
-          {/* 4 Answer Inputs with Radio Buttons */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-cyan-300 uppercase tracking-wide">
-                Respuestas (Marca el círculo para la Correcta):
-              </label>
-              <span className="text-[11px] text-amber-300 font-semibold">
-                Correcta actual: Opción {correctAnswer}
-              </span>
-            </div>
-
-            {(['A', 'B', 'C', 'D'] as OptionLetter[]).map((letter) => {
-              const isChecked = correctAnswer === letter;
-              return (
-                <div
-                  key={letter}
-                  className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all ${
-                    isChecked
-                      ? 'bg-emerald-950/30 border-emerald-400/80 shadow-[0_0_15px_rgba(16,185,129,0.25)]'
-                      : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <label className="flex items-center gap-2 cursor-pointer shrink-0">
-                    <input
-                      type="radio"
-                      name="correctOption"
-                      value={letter}
-                      checked={isChecked}
-                      onChange={() => setCorrectAnswer(letter)}
-                      className="w-4 h-4 text-emerald-500 accent-emerald-500 cursor-pointer"
-                    />
-                    <span className={`w-6 h-6 rounded flex items-center justify-center font-bold text-xs font-['Orbitron',sans-serif] ${
-                      isChecked ? 'bg-emerald-500 text-slate-950 font-black' : 'bg-slate-800 text-amber-400'
-                    }`}>
-                      {letter}
-                    </span>
-                  </label>
-
-                  <input
-                    type="text"
-                    value={options[letter]}
-                    onChange={(e) => setOptions({ ...options, [letter]: e.target.value })}
-                    placeholder={`Respuesta opción ${letter}...`}
-                    className="flex-1 bg-slate-900/80 border border-slate-700 focus:border-cyan-400 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
-                  />
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Explanation */}
-          <div>
-            <label className="text-xs font-bold text-slate-400 block mb-1">
-              Dato curioso / Explicación histórica (opcional):
-            </label>
-            <input
-              type="text"
-              value={explanation}
-              onChange={(e) => setExplanation(e.target.value)}
-              placeholder="Ej: Naiguatá fue fundado en... / El Faro data de..."
-              className="w-full bg-slate-950/70 border border-slate-800 focus:border-cyan-400 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none"
-            />
-          </div>
-        </div>
-
-        {/* Footer Actions */}
-        <div className="pt-3 border-t border-cyan-500/30 flex flex-wrap items-center justify-between gap-2 shrink-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleSaveQuestion}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-md cursor-pointer transition"
-            >
-              <Save className="w-4 h-4" />
-              <span>Guardar Pregunta</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm('¿Restaurar las 75 preguntas oficiales para las 5 sesiones de participantes?')) {
-                  onRestoreDefaults();
-                  setSaveToast('¡75 preguntas oficiales restauradas y guardadas en Supabase!');
-                  setTimeout(() => setSaveToast(null), 3000);
-                }
-              }}
-              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Restaurar 75 Oficiales</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDownloadStandaloneHtml}
-              title="Descargar Juego completo con todas las sesiones en un solo archivo HTML para jugar offline"
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-md transition cursor-pointer font-['Orbitron',sans-serif]"
-            >
-              <Download className="w-4 h-4 stroke-[2.5]" />
-              <span>Exportar HTML</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleExportJson}
-              title="Exportar todas las sesiones a JSON"
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-
-            {/* Botón Upload que acepta tanto .txt como .json */}
-            <label
-              title="Importar preguntas (.txt o .json)"
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs transition cursor-pointer border border-transparent hover:border-cyan-400/40"
-            >
-              <Upload className="w-4 h-4" />
-              <input
-                type="file"
-                accept=".txt,.json,text/plain,application/json"
-                onChange={handleImportFile}
-                className="hidden"
-              />
-            </label>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+                    className={`p-2 rounded
