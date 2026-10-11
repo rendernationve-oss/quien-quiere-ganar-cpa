@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, RotateCcw, Download, Upload, CheckCircle, FileCode, Play, Plus, User, Trash2, Camera, Image as ImageIcon, Sparkles, Check, ShieldCheck, Loader2 } from 'lucide-react';
+import { X, Save, RotateCcw, Download, Upload, CheckCircle, FileCode, Play, Plus, User, Trash2, Camera, Sparkles, ShieldCheck, Loader2 } from 'lucide-react';
 import { ParticipantSession, Question, OptionLetter } from '../../types/game';
 import { generateSingleFileHtml } from '../../utils/singleFileHtmlGenerator';
 import {
@@ -11,10 +11,6 @@ import {
   optimizeImageFile,
 } from '../../utils/logoStorage';
 
-/**
- * Analizador integrado para archivos .txt y documentos de Google Docs
- * Formato soportado: bloquepreguntas1.txt (P1, P2..., 1-Pregunta, A/B/C/D, R Letra)
- */
 function parseQuestionsTxt(rawText: string, existingParticipants: ParticipantSession[]): ParticipantSession[] {
   const lines = rawText
     .split(/\r?\n/)
@@ -61,7 +57,7 @@ function parseQuestionsTxt(rawText: string, existingParticipants: ParticipantSes
         } else {
           mergedQuestions.push({
             id: lvl,
-            question: `Pregunta nivel ${lvl}`,
+            question: 'Pregunta nivel ' + lvl,
             options: { A: 'Opción A', B: 'Opción B', C: 'Opción C', D: 'Opción D' },
             correctAnswer: 'A',
           });
@@ -69,9 +65,9 @@ function parseQuestionsTxt(rawText: string, existingParticipants: ParticipantSes
       }
 
       parsedParticipants.push({
-        id: existing?.id || `participant-${currentPartNumber}-${Date.now()}`,
+        id: existing?.id || 'participant-' + currentPartNumber + '-' + Date.now(),
         participantNumber: currentPartNumber,
-        name: existing?.name || `Participante ${currentPartNumber} - Socio Puerto Azul`,
+        name: existing?.name || 'Participante ' + currentPartNumber + ' - Socio Puerto Azul',
         questions: mergedQuestions,
         status: 'not_started',
         currentLevel: 1,
@@ -84,7 +80,6 @@ function parseQuestionsTxt(rawText: string, existingParticipants: ParticipantSes
   };
 
   for (const line of lines) {
-    // Detectar encabezado de participante: P1, P2, P3, etc.
     const partMatch = line.match(/^P(\d+)$/i);
     if (partMatch) {
       flushParticipant();
@@ -92,7 +87,6 @@ function parseQuestionsTxt(rawText: string, existingParticipants: ParticipantSes
       continue;
     }
 
-    // Detectar inicio de pregunta: "1-¿En qué..." o "14- ¿Qué..."
     const qMatch = line.match(/^(\d+)\s*[-.]\s*(.+)$/);
     if (qMatch) {
       flushQuestion();
@@ -101,14 +95,12 @@ function parseQuestionsTxt(rawText: string, existingParticipants: ParticipantSes
       continue;
     }
 
-    // Detectar respuesta correcta: "R C" o "R: C"
     const rMatch = line.match(/^R[:\s]+([ABCD])$/i);
     if (rMatch) {
       currentCorrect = rMatch[1].toUpperCase() as OptionLetter;
       continue;
     }
 
-    // Detectar opciones A, B, C, D: "A Miranda", "B 1950-1955", etc.
     const optMatch = line.match(/^([ABCD])[)\s.:-]+(.+)$/);
     if (optMatch && currentQId !== null) {
       const letter = optMatch[1].toUpperCase() as OptionLetter;
@@ -164,11 +156,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [explanation, setExplanation] = useState<string>('');
   const [saveToast, setSaveToast] = useState<string | null>(null);
 
-  // Google Docs Link import state
   const [googleDocsUrl, setGoogleDocsUrl] = useState<string>('');
   const [isLoadingGoogleDoc, setIsLoadingGoogleDoc] = useState<boolean>(false);
 
-  // Logo configuration state
   const [internalLogoConfig, setInternalLogoConfig] = useState<LogoConfig>(() =>
     propLogoConfig || getInitialLogoConfig()
   );
@@ -187,7 +177,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setInternalLogoConfig(updated);
     persistLogoConfig(updated);
     onUpdateLogo?.(updated);
-    setSaveToast(`¡Logotipo fijado permanentemente en modo: ${mode === 'custom' ? 'Imagen personalizada' : mode}!`);
+    const modeLabel = mode === 'custom' ? 'Imagen personalizada' : mode;
+    setSaveToast('¡Logotipo fijado permanentemente en modo: ' + modeLabel + '!');
     setTimeout(() => setSaveToast(null), 3000);
   };
 
@@ -266,7 +257,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       onSaveParticipantName(selectedPartIndex, participantName.trim());
     }
 
-    setSaveToast(`¡Pregunta del Nivel ${selectedLevel} para "${participantName}" guardada en Supabase y Local!`);
+    setSaveToast('¡Pregunta del Nivel ' + selectedLevel + ' guardada en Supabase y Local!');
     setTimeout(() => setSaveToast(null), 3000);
   };
 
@@ -306,7 +297,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     const parsed = parseQuestionsTxt(cleanedContent, participants);
 
     if (parsed.length === 0) {
-      alert(`No se reconocieron bloques de preguntas válidos (P1, P2...) desde ${sourceLabel}. Revisa que tenga la estructura de bloquepreguntas1.txt.`);
+      alert('No se reconocieron bloques de preguntas válidos (P1, P2...) desde ' + sourceLabel + '. Revisa que tenga la estructura de bloquepreguntas1.txt.');
       return false;
     }
 
@@ -322,7 +313,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     });
 
     onImportTournament(mergedParticipants);
-    setSaveToast(`¡Carga exitosa desde ${sourceLabel}! Se actualizaron y guardaron en Supabase ${parsed.length} participantes.`);
+    setSaveToast('¡Carga exitosa desde ' + sourceLabel + '! Se actualizaron y guardaron en Supabase ' + parsed.length + ' participantes.');
     setTimeout(() => setSaveToast(null), 4000);
     return true;
   };
@@ -337,7 +328,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
       if (file.name.endsWith('.txt') || rawContent.includes('P1')) {
         try {
-          processTxtRawContent(rawContent, `archivo ${file.name}`);
+          processTxtRawContent(rawContent, 'archivo ' + file.name);
         } catch (err) {
           console.error(err);
           alert('Hubo un error al procesar el archivo .txt.');
@@ -384,12 +375,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       const docIdMatch = trimmedUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
 
       if (docIdMatch && docIdMatch[1]) {
-        fetchUrl = `https://docs.google.com/document/d/${docIdMatch[1]}/export?format=txt`;
+        fetchUrl = 'https://docs.google.com/document/d/' + docIdMatch[1] + '/export?format=txt';
       }
 
       const response = await fetch(fetchUrl);
       if (!response.ok) {
-        throw new Error(`Error HTTP ${response.status}`);
+        throw new Error('Error HTTP ' + response.status);
       }
 
       const rawText = await response.text();
@@ -410,8 +401,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
       <div className="relative w-full max-w-4xl bg-gradient-to-b from-[#0a1533] via-[#050b1f] to-[#081335] border-2 border-cyan-400 rounded-3xl shadow-[0_0_50px_rgba(6,182,212,0.6)] p-5 sm:p-7 max-h-[92vh] flex flex-col overflow-hidden">
-        
-        {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-cyan-500/30 shrink-0">
           <div className="flex items-center gap-2">
             <span className="p-1.5 rounded-lg bg-cyan-950 border border-cyan-500/40 text-cyan-300">
@@ -435,7 +424,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           </button>
         </div>
 
-        {/* Toast Alert */}
         {saveToast && (
           <div className="my-2 p-2 bg-emerald-950/90 border border-emerald-400/80 rounded-lg text-xs font-bold text-emerald-200 flex items-center gap-2 animate-in fade-in duration-200 shrink-0">
             <CheckCircle className="w-4 h-4 text-emerald-400" />
@@ -443,10 +431,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           </div>
         )}
 
-        {/* Scrollable Form Body */}
         <div className="overflow-y-auto pr-1 sm:pr-2 space-y-4 my-3 text-left">
-          
-          {/* Carga Masiva: Archivo .TXT o Enlace de Google Docs */}
           <div className="bg-[#040b24] p-3.5 rounded-2xl border border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.15)] space-y-2.5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -487,103 +472,4 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 type="button"
                 disabled={isLoadingGoogleDoc}
                 onClick={handleImportFromGoogleDocs}
-                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0 shadow"
-              >
-                {isLoadingGoogleDoc ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Download className="w-3.5 h-3.5" />
-                )}
-                <span>{isLoadingGoogleDoc ? 'Cargando...' : 'Cargar desde Google Docs'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Logo Customization Banner & Controls */}
-          <div className="bg-[#04081c] p-3 rounded-2xl border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.15)]">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                <div>
-                  <h4 className="text-xs font-black uppercase tracking-wider text-amber-300 font-['Orbitron',sans-serif] flex items-center gap-1.5">
-                    <span>Logotipo Permanente del Programa</span>
-                    <span className="text-[10px] text-emerald-400 font-sans font-bold flex items-center gap-0.5">
-                      <ShieldCheck className="w-3.5 h-3.5" /> Fijo
-                    </span>
-                  </h4>
-                  <p className="text-[10px] text-slate-400">
-                    Modo actual: <strong className="text-cyan-300 uppercase">{activeLogoConfig.mode === 'custom' ? 'Imagen personalizada' : activeLogoConfig.mode}</strong> (se mantiene fijo hasta que lo modifiques)
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  ref={logoFileInputRef}
-                  accept="image/*"
-                  onChange={handleLogoUpload}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  disabled={isOptimizingLogo}
-                  onClick={() => logoFileInputRef.current?.click()}
-                  className="px-2.5 py-1 rounded-lg bg-cyan-700 hover:bg-cyan-600 disabled:opacity-50 text-white font-bold text-[11px] flex items-center gap-1 transition cursor-pointer shadow"
-                >
-                  {isOptimizingLogo ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Camera className="w-3.5 h-3.5" />
-                  )}
-                  <span>{activeLogoConfig.customImageData ? 'Cambiar Imagen' : 'Subir Imagen'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowLogoSection(!showLogoSection)}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[11px] transition cursor-pointer"
-                >
-                  {showLogoSection ? 'Ocultar Opciones' : 'Cambiar Modo'}
-                </button>
-              </div>
-            </div>
-
-            {showLogoSection && (
-              <div className="mt-3 pt-3 border-t border-slate-800">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => handleUpdateLogoMode('puerto_azul')}
-                    className={`p-2 rounded-xl border text-center transition cursor-pointer ${
-                      activeLogoConfig.mode === 'puerto_azul'
-                        ? 'border-amber-400 bg-amber-500/10 text-amber-300 font-bold'
-                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-[11px]">¿Quién Quiere Ganar?</div>
-                    <div className="text-[9px] text-cyan-400">Puerto Azul TV</div>
-                    {activeLogoConfig.mode === 'puerto_azul' && (
-                      <span className="text-[9px] text-amber-400 font-bold block mt-0.5">✓ Fijo Activo</span>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleUpdateLogoMode('millonario')}
-                    className={`p-2 rounded-xl border text-center transition cursor-pointer ${
-                      activeLogoConfig.mode === 'millonario'
-                        ? 'border-amber-400 bg-amber-500/10 text-amber-300 font-bold'
-                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-[11px]">¿Quién Quiere Ser...?</div>
-                    <div className="text-[9px] text-amber-400">Millonario Clásico</div>
-                    {activeLogoConfig.mode === 'millonario' && (
-                      <span className="text-[9px] text-amber-400 font-bold block mt-0.5">✓ Fijo Activo</span>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleUpdateLogoMode('farito')}
-                    className={`p-2 rounded
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-60
